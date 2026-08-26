@@ -1,0 +1,77 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editors / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.next/
+.nuxt/
+.turbo/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Data and local artifacts (keep small samples tracked if needed)
+data/raw/
+data/processed/
+data/external/
+*.parquet
+*.h5
+*.pkl
+*.joblib
+models/*.bin
+models/*.onnx
+models/*.pt
+models/*.ckpt
+
+# Logs and temp
+logs/
+tmp/
+temp/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Docker
+*.local.yml
