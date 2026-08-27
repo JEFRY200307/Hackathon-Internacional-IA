@@ -12,12 +12,15 @@ Un dashboard fijo no responde a preguntas como “muéstrame saturación y LAB_A
 
 ## Flujo
 
-1. El agente llama `get_dashboard_context` para descubrir métricas, variables, niveles y casos disponibles.
-2. Consulta alertas, series o evidencia necesarias.
-3. Llama una vez a `emit_risa_ui` con bindings declarativos.
-4. El backend valida, descarta widgets inválidos e hidrata cálculos y datos.
-5. React renderiza el documento y reenvía únicamente acciones catalogadas.
-6. Si la composición falla, el backend entrega la plantilla segura del turno.
+1. Planner convierte la pregunta en `DashboardQueryPlan`.
+2. Resolver materializa uno o más `ResolvedScope` con filtros e IDs reales.
+3. El agente consulta alertas, series o evidencia sin poder ampliar el scope.
+4. Llama una vez a `emit_risa_ui` con bindings declarativos y `scope_id`.
+5. El backend valida, hidrata y verifica que filas, series, citas y evidencia pertenezcan al alcance.
+6. React muestra filtros/alcance y reenvía únicamente acciones catalogadas.
+7. Si la composición falla, una estrategia determinista compila el mismo plan a RISA UI.
+
+Intenciones soportadas: detalle, cohorte, comparación, tendencia, distribución y calidad. Selectores permitidos: pacientes explícitos, nivel, prioridad, edad, sexo, región, programa de atención y rangos de score/riesgo.
 
 ## Contrato v1.0
 
@@ -67,6 +70,9 @@ Variables permitidas: `heart_rate`, `spo2`, `resp_rate`, `sbp`, `dbp`, `temp`, `
 - Máximo 12 widgets, IDs únicos y textos acotados.
 - Solo se ejecuta la acción `select_alert`; nunca código arbitrario.
 - Un widget inválido no impide renderizar los widgets válidos restantes.
+- Fuentes `patient`/`alert` de RAG deben pertenecer a `resolved_scope`; reglas y variables pueden ser globales.
+- Las tools no pueden agregar pacientes o relajar filtros después de resolver el plan.
+- La respuesta expone `query_plan`, `resolved_scope` y warnings, no cadena de pensamiento.
 
 ## Criterios de aceptación
 
@@ -77,6 +83,8 @@ Variables permitidas: `heart_rate`, `spo2`, `resp_rate`, `sbp`, `dbp`, `temp`, `
 - [ ] Variables y widgets desconocidos no se ejecutan.
 - [ ] Seleccionar una alerta abre su detalle en el canvas.
 - [ ] Sin API key funciona una composición determinista mediante MockLLM.
+- [ ] PAT-0724 no puede devolver citas, filas, series ni texto de otro paciente.
+- [ ] Cohortes y comparaciones conservan exactamente los filtros resueltos.
 
 ## Prompts de demo
 

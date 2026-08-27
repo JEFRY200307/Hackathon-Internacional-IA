@@ -8,21 +8,29 @@ from app.risa_ui.protocol import template_turno, validate_risa_ui
 
 if TYPE_CHECKING:
     from app.data.loader import Dataset
+    from app.llm.planning import ResolvedScope
     from app.state import AppState
 
 VITAL_KEYS = {"heart_rate", "spo2", "resp_rate", "sbp", "dbp", "temp"}
 LAB_KEYS = {"LAB_A", "LAB_B", "LAB_C", "LAB_D"}
 
 
-def hydrate_risa_ui(doc: dict[str, Any], app: AppState) -> dict[str, Any]:
+def hydrate_risa_ui(
+    doc: dict[str, Any],
+    app: AppState,
+    scope: ResolvedScope | None = None,
+) -> dict[str, Any]:
     clean = validate_risa_ui(doc)
     hydrated = []
     for widget in clean["widgets"]:
         wtype = widget["type"]
+        ids = _scope_ids(scope, widget.get("cohort"))
         if wtype == "alert_list":
             limit = int(widget.get("limit") or 8)
             level = widget.get("level")
-            alerts = app.alerts if not level else [a for a in app.alerts if a["level"] == level]
+            alerts = _selected_alerts(app, ids)
+            if level:
+                alerts = [a for a in alerts if a["level"] == level]
             widget = {
                 **widget,
                 "items": [
@@ -33,50 +41,62 @@ def hydrate_risa_ui(doc: dict[str, Any], app: AppState) -> dict[str, Any]:
                         "pattern": a["pattern"],
                         "title": a["title"],
                         "score": a["score"],
+                        "risk_score": a.get("risk_score"),
+                        "priority_level": a.get("priority_level"),
                     }
                     for a in alerts[:limit]
                 ],
                 "empty_message": "No hay alertas para este filtro." if not alerts else None,
-                "provenance": {"source": app.dataset.origin, "count": len(alerts)},
+                "provenance": _provenance(app, scope, widget, len(alerts)),
             }
         elif wtype == "evidence":
             alert = app.alert_by_id(widget.get("alert_id") or "")
             if not alert and widget.get("patient_id"):
                 patient_alerts = app.alerts_for_patient(widget["patient_id"])
                 alert = patient_alerts[0] if patient_alerts else None
+            if alert and ids is not None and alert["patient_id"] not in ids:
+                alert = None
             widget = {
                 **widget,
                 "alert": alert,
                 "empty_message": "No se encontró evidencia para la referencia solicitada." if not alert else None,
-                "provenance": {"source": app.dataset.origin},
+                "provenance": _provenance(app, scope, widget),
             }
         elif wtype == "kpi":
-            value, detail = _kpi_value(app, widget)
+            value, detail = _kpi_value(app, widget, ids)
             widget = {
                 **widget,
                 "value": value,
                 "detail": detail,
-                "provenance": {"source": app.dataset.origin, "metric": widget["metric"]},
+                "provenance": {
+                    **_provenance(app, scope, widget),
+                    "metric": widget["metric"],
+                },
             }
         elif wtype == "chart":
             spec = widget.get("chart") or {}
-            widget = {
-                **widget,
-                "plotly": build_chart(
+            analysis = spec.get("analysis") or "patient_series"
+            if analysis == "patient_series":
+                plotly = build_chart(
                     app.dataset,
                     kind=spec.get("kind") or "line",
                     patient_id=spec.get("patient_id"),
                     variables=spec.get("variables") or ["heart_rate"],
                     title=widget.get("title") or spec.get("title"),
-                ),
+                )
+            else:
+                plotly = build_scope_chart(app, scope, widget)
+            widget = {
+                **widget,
+                "plotly": plotly,
             }
         elif wtype == "table":
-            rows = _table_rows(app, widget)
+            rows = _table_rows(app, widget, ids)
             widget = {
                 **widget,
                 "rows": rows,
                 "empty_message": "No hay filas para los filtros solicitados." if not rows else None,
-                "provenance": {"source": app.dataset.origin, "count": len(rows)},
+                "provenance": _provenance(app, scope, widget, len(rows)),
             }
         hydrated.append({key: value for key, value in widget.items() if value is not None})
     clean["widgets"] = hydrated
@@ -87,15 +107,43 @@ def turno_risa_ui(app: AppState) -> dict[str, Any]:
     return hydrate_risa_ui(template_turno(app.alerts, app.dataset.origin), app)
 
 
-def _table_rows(app: AppState, widget: dict) -> list[dict]:
+def _scope_ids(scope: ResolvedScope | None, cohort: str | None = None) -> set[str] | None:
+    return scope.cohort_ids(cohort) if scope else None
+
+
+def _selected_alerts(app: AppState, ids: set[str] | None) -> list[dict]:
+    return app.alerts if ids is None else [alert for alert in app.alerts if alert["patient_id"] in ids]
+
+
+def _provenance(
+    app: AppState,
+    scope: ResolvedScope | None,
+    widget: dict,
+    count: int | None = None,
+) -> dict[str, Any]:
+    value: dict[str, Any] = {"source": app.dataset.origin}
+    if count is not None:
+        value["count"] = count
+    if scope:
+        value["scope_id"] = scope.scope_id
+        value["cohort"] = widget.get("cohort")
+    return value
+
+
+def _table_rows(app: AppState, widget: dict, ids: set[str] | None = None) -> list[dict]:
     source = widget.get("source") or "alerts"
     limit = int(widget.get("limit") or 20)
     columns = widget.get("columns")
     if source == "patients":
-        rows = app.dataset.patients.to_dict(orient="records")
+        frame = app.dataset.patients
+        if ids is not None:
+            frame = frame[frame["patient_id"].isin(ids)]
+        rows = frame.to_dict(orient="records")
     else:
         level = (widget.get("filters") or {}).get("level")
-        alerts = app.alerts if not level else [a for a in app.alerts if a["level"] == level]
+        alerts = _selected_alerts(app, ids)
+        if level:
+            alerts = [a for a in alerts if a["level"] == level]
         rows = [
             {
                 "id": a["id"],
@@ -105,6 +153,10 @@ def _table_rows(app: AppState, widget: dict) -> list[dict]:
                 "score": a["score"],
                 "title": a.get("title"),
                 "review_status": a.get("review_status"),
+                "risk_score": a.get("risk_score"),
+                "priority_level": a.get("priority_level"),
+                "anomaly_score": a.get("anomaly_score"),
+                "pattern_score": a.get("pattern_score"),
             }
             for a in alerts
         ]
@@ -114,26 +166,141 @@ def _table_rows(app: AppState, widget: dict) -> list[dict]:
     return rows
 
 
-def _kpi_value(app: AppState, widget: dict[str, Any]) -> tuple[str, str]:
+def _kpi_value(
+    app: AppState,
+    widget: dict[str, Any],
+    ids: set[str] | None = None,
+) -> tuple[str, str]:
     metric = widget["metric"]
     level = (widget.get("filters") or {}).get("level")
-    alerts = app.alerts if not level else [a for a in app.alerts if a["level"] == level]
+    alerts = _selected_alerts(app, ids)
+    if level:
+        alerts = [a for a in alerts if a["level"] == level]
     if metric == "alert_count":
         detail = f"Alertas nivel {level}" if level else "Todas las alertas"
         return str(len(alerts)), detail
     if metric == "patient_count":
-        return str(len(app.dataset.patients)), "Pacientes en el dataset"
+        count = len(ids) if ids is not None else len(app.dataset.patients)
+        return str(count), "Pacientes en el alcance"
     if metric == "discarded_count":
-        return str(sum(1 for a in app.alerts if a["level"] == "DESCARTADO")), "Descartados con motivo visible"
+        return str(sum(1 for a in alerts if a["level"] == "DESCARTADO")), "Descartados con motivo visible"
     if metric == "average_risk_score":
         if not alerts:
             return "—", "Sin alertas para calcular el promedio"
-        average = sum(float(a.get("score") or 0) for a in alerts) / len(alerts)
+        average = sum(float(a.get("risk_score") or 0) for a in alerts) / len(alerts)
         return f"{average:.3f}", f"Promedio de {len(alerts)} alertas"
     if metric == "top_priority_patient":
         top = alerts[0] if alerts else None
         return (str(top["patient_id"]), f"{top['level']} · {top['pattern']}") if top else ("—", "Sin alertas")
     return "—", "Métrica no disponible"
+
+
+def build_scope_chart(
+    app: AppState,
+    scope: ResolvedScope | None,
+    widget: dict[str, Any],
+) -> dict[str, Any]:
+    spec = widget.get("chart") or {}
+    analysis = spec.get("analysis")
+    ids = _scope_ids(scope, widget.get("cohort"))
+    if scope is None or ids is None:
+        return {"error": "El gráfico agregado requiere un alcance resuelto.", "data": [], "layout": {}}
+    if not ids:
+        return {"error": "El alcance no contiene pacientes.", "data": [], "layout": {}}
+    title = widget.get("title") or "Análisis de cohorte"
+    provenance = {
+        "scope_id": scope.scope_id,
+        "cohort": widget.get("cohort"),
+        "patient_count": len(ids),
+        "source": app.dataset.origin,
+    }
+    if analysis == "alert_breakdown":
+        group_by = spec.get("group_by") or "level"
+        alerts = _selected_alerts(app, ids)
+        counts: dict[str, int] = {}
+        for alert in alerts:
+            key = str(alert.get(group_by) or "SIN_DATO")
+            counts[key] = counts.get(key, 0) + 1
+        return {
+            "data": [{"type": "bar", "name": "alertas", "x": list(counts), "y": list(counts.values())}],
+            "layout": {"title": title, "xaxis": {"title": group_by}, "yaxis": {"title": "alertas"}},
+            "provenance": [provenance],
+            "origin": app.dataset.origin,
+        }
+    if analysis == "distribution":
+        field = spec.get("field")
+        if field == "age_years":
+            frame = app.dataset.patients
+            values = frame[frame["patient_id"].isin(ids)][field].dropna().astype(float).tolist()
+        else:
+            values = [
+                float(alert.get(field) or 0)
+                for alert in _selected_alerts(app, ids)
+                if alert.get(field) is not None
+            ]
+        return {
+            "data": [{"type": "histogram", "name": field, "x": values}],
+            "layout": {"title": title, "xaxis": {"title": field}, "yaxis": {"title": "frecuencia"}},
+            "provenance": [provenance],
+            "origin": app.dataset.origin,
+        }
+    if analysis == "cohort_comparison":
+        field = spec.get("field")
+        names, values = [], []
+        for cohort in scope.cohorts:
+            cohort_ids = set(cohort.patient_ids)
+            names.append(cohort.name)
+            if field == "age_years":
+                frame = app.dataset.patients
+                series = frame[frame["patient_id"].isin(cohort_ids)][field].dropna().astype(float)
+                values.append(round(float(series.mean()), 3) if len(series) else 0)
+            elif field:
+                samples = [
+                    float(alert.get(field) or 0)
+                    for alert in _selected_alerts(app, cohort_ids)
+                    if alert.get(field) is not None
+                ]
+                values.append(round(sum(samples) / len(samples), 3) if samples else 0)
+            else:
+                values.append(len(cohort_ids))
+        return {
+            "data": [{"type": "bar", "name": field or "pacientes", "x": names, "y": values}],
+            "layout": {"title": title, "xaxis": {"title": "cohorte"}, "yaxis": {"title": field or "pacientes"}},
+            "provenance": [provenance],
+            "origin": app.dataset.origin,
+        }
+    if analysis == "cohort_timeseries":
+        traces = []
+        missing = []
+        for variable in spec.get("variables") or []:
+            points = []
+            for patient_id in ids:
+                series = _series(app.dataset, patient_id, variable)
+                if series is not None and not series.empty:
+                    points.append(series)
+            if not points:
+                missing.append(variable)
+                continue
+            combined = pd.concat(points).sort_index()
+            daily = combined.groupby(combined.index.floor("D")).mean()
+            traces.append(
+                {
+                    "type": "scatter",
+                    "mode": "lines+markers",
+                    "name": variable,
+                    "x": [timestamp.isoformat() for timestamp in daily.index],
+                    "y": [round(float(value), 3) for value in daily.values],
+                }
+            )
+        return {
+            "data": traces,
+            "layout": {"title": title, "xaxis": {"title": "tiempo"}, "yaxis": {"title": "media de cohorte"}},
+            "provenance": [provenance],
+            "missing": missing,
+            "origin": app.dataset.origin,
+            **({"error": "No hay series para el alcance solicitado."} if not traces else {}),
+        }
+    return {"error": f"Análisis agregado desconocido: {analysis}", "data": [], "layout": {"title": title}}
 
 
 def build_chart(

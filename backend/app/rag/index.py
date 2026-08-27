@@ -84,8 +84,23 @@ class RagIndex:
             except Exception:
                 self._embeddings = None
 
-    def search(self, query: str, k: int = 4) -> list[dict]:
+    def search(
+        self,
+        query: str,
+        k: int = 4,
+        *,
+        patient_ids: set[str] | None = None,
+    ) -> list[dict]:
         if not self.docs:
+            return []
+        candidates = [
+            index
+            for index, doc in enumerate(self.docs)
+            if patient_ids is None
+            or doc["kind"] in {"rule", "variable"}
+            or doc.get("patient_id") in patient_ids
+        ]
+        if not candidates:
             return []
         if self._embeddings is not None and settings.openai_api_key:
             try:
@@ -94,18 +109,19 @@ class RagIndex:
                 client = OpenAI(api_key=settings.openai_api_key)
                 q = client.embeddings.create(model="text-embedding-3-small", input=[query])
                 qv = np.array(q.data[0].embedding, dtype=float)
-                sims = self._embeddings @ qv / (
-                    np.linalg.norm(self._embeddings, axis=1) * (np.linalg.norm(qv) + 1e-9) + 1e-9
+                matrix = self._embeddings[candidates]
+                sims = matrix @ qv / (
+                    np.linalg.norm(matrix, axis=1) * (np.linalg.norm(qv) + 1e-9) + 1e-9
                 )
                 order = np.argsort(-sims)[:k]
-                return [self._hit(int(i), float(sims[int(i)])) for i in order]
+                return [self._hit(candidates[int(i)], float(sims[int(i)])) for i in order]
             except Exception:
                 pass
         assert self._vectorizer is not None and self._matrix is not None
         q = self._vectorizer.transform([query])
-        sims = cosine_similarity(q, self._matrix).ravel()
+        sims = cosine_similarity(q, self._matrix[candidates]).ravel()
         order = np.argsort(-sims)[:k]
-        return [self._hit(int(i), float(sims[int(i)])) for i in order if sims[int(i)] > 0 or True]
+        return [self._hit(candidates[int(i)], float(sims[int(i)])) for i in order]
 
     def _hit(self, i: int, score: float) -> dict:
         doc = self.docs[i]

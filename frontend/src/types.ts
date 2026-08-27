@@ -36,15 +36,29 @@ export type AlertItem = {
   }>;
   missing_sources: string[];
   review_status: string;
-  local_model_score?: number;
+  anomaly_score?: number;
+  pattern_score?: number;
+  risk_score?: number;
+  priority_level?: string;
+  model_provenance?: {
+    source?: string;
+    fingerprint?: string;
+    anomaly_model?: string;
+    pattern_model?: string;
+  };
 };
 
-export type AlertSummary = Pick<AlertItem, "id" | "patient_id" | "level" | "pattern" | "title" | "score">;
+export type AlertSummary = Pick<
+  AlertItem,
+  "id" | "patient_id" | "level" | "pattern" | "title" | "score" | "risk_score" | "priority_level"
+>;
 
 export type RisaUiProvenance = {
   source: string;
   count?: number;
   metric?: string;
+  scope_id?: string;
+  cohort?: string;
 };
 
 type RisaUiBaseWidget = {
@@ -101,7 +115,15 @@ export type RisaUiDocument = {
 export type PlotlySpec = {
   data: unknown[];
   layout: Record<string, unknown>;
-  provenance?: Array<{ variable: string; source: string; n: number; patient_id: string }>;
+  provenance?: Array<{
+    variable?: string;
+    source: string;
+    n?: number;
+    patient_id?: string;
+    scope_id?: string;
+    cohort?: string;
+    patient_count?: number;
+  }>;
   error?: string;
   missing?: string[];
   origin?: string;
@@ -117,4 +139,16 @@ export type AssistantMessage = {
   charts?: PlotlySpec[];
   degraded?: boolean;
   model?: string | null;
+  query_plan?: {
+    intent: string;
+    wants_dashboard: boolean;
+    cohorts: Array<Record<string, unknown>>;
+  };
+  resolved_scope?: {
+    scope_id: string;
+    patient_ids: string[];
+    cohorts: Array<{ name: string; total: number; filters: Record<string, unknown> }>;
+    warnings: string[];
+  };
+  warnings?: string[];
 };

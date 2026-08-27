@@ -177,6 +177,20 @@ button, input { font: inherit; }
   opacity: 0.9;
 }
 .trace { margin-top: 8px; color: var(--ink-secondary); font-size: 0.8rem; }
+.scope-badge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+}
+.scope-warnings { margin-top: 8px; color: var(--ink-secondary); font-size: 0.75rem; }
+.model-scores { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.model-scores span { padding: 3px 7px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.72rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 8px; }
 .chips button { font-size: 0.78rem; }
 .composer { display: flex; gap: 8px; padding: 0 16px 16px; }

@@ -54,8 +54,15 @@ TableColumn = Literal[
     "score",
     "title",
     "review_status",
-    "age",
-    "sex",
+    "risk_score",
+    "priority_level",
+    "anomaly_score",
+    "pattern_score",
+    "age_years",
+    "age_group",
+    "sex_at_birth",
+    "region_type",
+    "care_program",
 ]
 
 
@@ -74,6 +81,8 @@ class WidgetAction(StrictModel):
 class BaseWidget(StrictModel):
     id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     title: str | None = Field(default=None, max_length=160)
+    scope_id: str | None = Field(default=None, max_length=64)
+    cohort: str | None = Field(default=None, max_length=50)
 
 
 class KpiWidget(BaseWidget):
@@ -84,9 +93,27 @@ class KpiWidget(BaseWidget):
 
 
 class ChartBinding(StrictModel):
+    analysis: Literal[
+        "patient_series",
+        "cohort_timeseries",
+        "distribution",
+        "cohort_comparison",
+        "alert_breakdown",
+    ] = "patient_series"
     patient_id: str | None = Field(default=None, min_length=1, max_length=32)
-    variables: list[Variable] = Field(min_length=1, max_length=4)
+    variables: list[Variable] = Field(default_factory=list, max_length=4)
+    field: Literal["age_years", "score", "risk_score", "anomaly_score", "pattern_score"] | None = None
+    group_by: Literal["level", "priority_level", "age_group", "sex_at_birth", "region_type", "care_program", "pattern"] | None = None
+    aggregate: Literal["mean", "median", "count"] = "mean"
     kind: Literal["line", "bar", "scatter"] = "line"
+
+    @model_validator(mode="after")
+    def validate_analysis(self) -> ChartBinding:
+        if self.analysis in {"patient_series", "cohort_timeseries"} and not self.variables:
+            raise ValueError("las series requieren al menos una variable")
+        if self.analysis == "distribution" and not self.field:
+            raise ValueError("distribution requiere field")
+        return self
 
 
 class ChartWidget(BaseWidget):
@@ -104,8 +131,27 @@ class TableWidget(BaseWidget):
 
     @model_validator(mode="after")
     def validate_source_fields(self) -> TableWidget:
-        alert_columns = {"id", "patient_id", "level", "pattern", "score", "title", "review_status"}
-        patient_columns = {"patient_id", "age", "sex"}
+        alert_columns = {
+            "id",
+            "patient_id",
+            "level",
+            "pattern",
+            "score",
+            "title",
+            "review_status",
+            "risk_score",
+            "priority_level",
+            "anomaly_score",
+            "pattern_score",
+        }
+        patient_columns = {
+            "patient_id",
+            "age_years",
+            "age_group",
+            "sex_at_birth",
+            "region_type",
+            "care_program",
+        }
         allowed = alert_columns if self.source == "alerts" else patient_columns
         if self.columns and not set(self.columns).issubset(allowed):
             raise ValueError(f"columnas incompatibles con source={self.source}")

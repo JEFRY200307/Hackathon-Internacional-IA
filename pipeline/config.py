@@ -28,7 +28,7 @@ RESULTS_DIR = DATA_ROOT / "results"
 CACHE_DIR = DATA_ROOT / "cache"
 CACHE_PATH = CACHE_DIR / "dataset.pkl"
 
-MODEL_VERSION = "risa-signal-pipeline-1.0.0"
+MODEL_VERSION = "risa-signal-pipeline-1.1.0"
 
 # Variables observacionales (05_metadata/variable_catalog.csv) mapeadas a las
 # claves internas en snake_case que consumen backend y frontend.

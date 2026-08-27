@@ -171,9 +171,35 @@ export default function App() {
           {turns.map((t, i) => (
             <article key={i} className={`bubble ${t.role}`}>
               {format(t.content)}
+              {t.role === "assistant" && t.resolved_scope && (
+                <div className="scope-badge">
+                  <strong>{t.resolved_scope.scope_id}</strong>
+                  <span>
+                    {t.resolved_scope.patient_ids.length} paciente(s) ·{" "}
+                    {t.resolved_scope.cohorts.map((cohort) => `${cohort.name}: ${cohort.total}`).join(" · ")}
+                  </span>
+                </div>
+              )}
+              {t.role === "assistant" && t.warnings && t.warnings.length > 0 && (
+                <details className="scope-warnings">
+                  <summary>verificación del alcance</summary>
+                  <ul>
+                    {t.warnings.map((warning, warningIndex) => (
+                      <li key={warningIndex}>{warning}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {t.role === "assistant" && t.citations && t.citations.length > 0 && (
                 <div className="cites">
-                  {t.citations.map((c) => (
+                  {t.citations
+                    .filter(
+                      (citation) =>
+                        !t.resolved_scope ||
+                        !["alert", "patient"].includes(citation.kind) ||
+                        (!!citation.patient_id && t.resolved_scope.patient_ids.includes(citation.patient_id)),
+                    )
+                    .map((c) => (
                     <details key={c.source_id}>
                       <summary style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span>{c.source_id} - {c.title}</span>
@@ -192,7 +218,7 @@ export default function App() {
                       </summary>
                       <pre>{c.snippet}</pre>
                     </details>
-                  ))}
+                    ))}
                 </div>
               )}
               {t.role === "assistant" && t.tool_trace && t.tool_trace.length > 0 && (
@@ -239,8 +265,20 @@ export default function App() {
             </h2>
             <p>{selected.title}</p>
             <p className="muted">
-              Patrón {selected.pattern} · revisión {selected.review_status} · IF local {selected.local_model_score}
+              Patrón {selected.pattern} · revisión {selected.review_status} · prioridad {selected.priority_level || "—"}
             </p>
+            <div className="model-scores">
+              <span>Reglas: {selected.score}</span>
+              <span>Anomaly: {selected.anomaly_score ?? "—"}</span>
+              <span>Pattern: {selected.pattern_score ?? "—"}</span>
+              <span>Riesgo: {selected.risk_score ?? "—"}</span>
+            </div>
+            {selected.model_provenance && (
+              <p className="muted">
+                Modelos: {selected.model_provenance.anomaly_model || "—"} /{" "}
+                {selected.model_provenance.pattern_model || "—"} · {selected.model_provenance.source || "sin procedencia"}
+              </p>
+            )}
             <div className="evidence">
               <h3>Evidencia</h3>
               <ul>

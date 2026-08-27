@@ -46,6 +46,7 @@ from pipeline.preparacion_datos import (
 )
 
 WINDOW_HOURS = 120  # ventana de análisis anclada al último dato disponible por paciente (~5 días)
+CACHE_SCHEMA_VERSION = "2"
 
 
 @dataclass
@@ -61,7 +62,9 @@ class PipelineResult:
     priority_levels: dict[str, str]
     quality_report: dict
     evaluation: dict
+    model_provenance: dict
     model_version: str = MODEL_VERSION
+    cache_schema_version: str = CACHE_SCHEMA_VERSION
 
     def vitals_for(self, patient_id: str) -> pd.DataFrame:
         return self.vitals_wide[self.vitals_wide["patient_id"] == patient_id].sort_values("timestamp")
@@ -173,8 +176,9 @@ def build_dataset(max_patients: int | None = None) -> PipelineResult:
     # `pipeline/data/model/`.
     comparison = evaluacion.compare_models(drafts)
     evaluacion.persist_best_models(comparison)
-    anomaly_scores, pattern_scores = evaluacion.score_all(comparison, drafts)
+    anomaly_scores, pattern_scores, model_provenance = evaluacion.score_from_persisted_models(drafts)
     evaluation = evaluacion.comparison_report(comparison)
+    evaluation["model_provenance"] = model_provenance
 
     # Risk Engine + Priority Engine: fusionan reglas + Anomaly Model +
     # Pattern Model en un risk_score/priority_level únicos por paciente.
@@ -197,6 +201,7 @@ def build_dataset(max_patients: int | None = None) -> PipelineResult:
         priority_levels=priority_levels,
         quality_report=quality_report,
         evaluation=evaluation,
+        model_provenance=model_provenance,
     )
 
 
@@ -211,7 +216,14 @@ def load_or_build(force: bool = False) -> PipelineResult:
     if not force and CACHE_PATH.exists():
         try:
             with open(CACHE_PATH, "rb") as f:
-                return pickle.load(f)
+                cached = pickle.load(f)
+            current = evaluacion.model_artifact_provenance()
+            if (
+                getattr(cached, "cache_schema_version", None) == CACHE_SCHEMA_VERSION
+                and getattr(cached, "model_version", None) == MODEL_VERSION
+                and getattr(cached, "model_provenance", {}).get("fingerprint") == current.get("fingerprint")
+            ):
+                return cached
         except Exception:
             pass
     result = build_dataset()

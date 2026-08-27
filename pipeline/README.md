@@ -42,6 +42,10 @@ python -m pipeline.run_pipeline --export-submission # además escribe data/resul
 
 El backend llama a `pipeline.despliegue.load_or_build()` en el arranque (`backend/app/data/loader.py`) — no hace falta correr el CLI a mano para levantar la API, solo para regenerar `data/results/`, forzar un reentrenamiento, o inspeccionar el reporte desde la terminal.
 
+Los ganadores se persisten y se vuelven a cargar desde `anomaly_model_best.joblib` y `pattern_model_best.joblib` antes de puntuar los 1000 pacientes. `PipelineResult.model_provenance` registra modelo elegido, SHA-256 y fingerprint combinado con `source=persisted_artifact`. La caché solo se acepta cuando coinciden versión de schema, `MODEL_VERSION` y fingerprint; en caso contrario se reconstruye.
+
+Este flujo batch alimenta `anomaly_score`, `pattern_score`, `risk_score` y `priority_level` de `/api/alerts`. Es distinto de `PRETRAINED_MODEL_URL`, que es un enriquecimiento HTTP opcional y no reemplaza los modelos del pipeline.
+
 ## Advertencia sobre la calibración por percentil y el entrenamiento
 
 Tanto `modelado.calibrate_thresholds()` (umbrales de las reglas) como `deteccion_anomalias`/`modelado_patrones` (modelos entrenables) operan sobre **la población que efectivamente se cargó en esa corrida**. Correr con `--patients 20` calibra y entrena sobre 20 pacientes, no sobre 1000. La entrega oficial (`data/results/`, `data/model/*.joblib`) siempre se genera sin `--patients`.

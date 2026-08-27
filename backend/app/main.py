@@ -58,6 +58,7 @@ def health() -> dict[str, Any]:
         "llm": "openai" if settings.openai_api_key else "mock",
         "model": settings.llm_model if settings.openai_api_key else "mock",
         "pretrained": model_status(),
+        "pipeline_models": getattr(state.dataset, "model_provenance", {}),
     }
 
 
@@ -85,6 +86,7 @@ def pipeline_report() -> dict[str, Any]:
         "model_version": state.dataset.model_version,
         "data_quality": state.dataset.quality_report,
         "evaluation": state.dataset.evaluation,
+        "model_provenance": getattr(state.dataset, "model_provenance", {}),
     }
 
 
@@ -113,8 +115,13 @@ def review_alert(alert_id: str, body: ReviewRequest) -> dict[str, Any]:
 
 
 @app.get("/api/rag/search")
-def rag_search(q: str, k: int = 4) -> dict[str, Any]:
-    return {"query": q, "hits": state.rag.search(q, k=k)}
+def rag_search(q: str, k: int = 4, patient_ids: str | None = None) -> dict[str, Any]:
+    scope = {item.strip().upper() for item in (patient_ids or "").split(",") if item.strip()}
+    return {
+        "query": q,
+        "patient_ids": sorted(scope),
+        "hits": state.rag.search(q, k=min(12, k), patient_ids=scope or None),
+    }
 
 
 @app.get("/api/model/status")

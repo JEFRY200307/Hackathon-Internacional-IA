@@ -7,6 +7,8 @@ from app.data.loader import Dataset
 from pipeline.modelado import LEVEL_ORDER
 from pipeline.fusion_evidencia import assign_evidence_roles
 
+PRIORITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -34,6 +36,7 @@ def build_alerts(dataset: Dataset) -> list[dict]:
     """Adapta los `AlertDraft` ya calculados por el pipeline (fase de Modelado,
     Anomaly/Pattern/Risk/Priority Engine) al feed de la API."""
     alerts = []
+    provenance = getattr(dataset, "model_provenance", {})
     for i, d in enumerate(dataset.alert_drafts, start=1):
         alerts.append(
             {
@@ -48,14 +51,26 @@ def build_alerts(dataset: Dataset) -> list[dict]:
                 "features": d.features,
                 "anomaly_score": round(dataset.anomaly_scores.get(d.patient_id, 0.0), 3),
                 "pattern_score": round(dataset.pattern_scores.get(d.patient_id, 0.0), 3),
-                "local_model_score": round(dataset.pattern_scores.get(d.patient_id, 0.0), 3),
                 "risk_score": dataset.risk_scores.get(d.patient_id, 0.0),
                 "priority_level": dataset.priority_levels.get(d.patient_id, "LOW"),
+                "model_provenance": {
+                    "source": provenance.get("source"),
+                    "fingerprint": provenance.get("fingerprint"),
+                    "anomaly_model": (provenance.get("anomaly") or {}).get("chosen_model"),
+                    "pattern_model": (provenance.get("pattern") or {}).get("chosen_model"),
+                },
                 "review_status": "abierta",
                 "created_at": _now(),
             }
         )
-    alerts.sort(key=lambda a: (LEVEL_ORDER.get(a["level"], 9), -a["score"]))
+    alerts.sort(
+        key=lambda a: (
+            PRIORITY_ORDER.get(a["priority_level"], 9),
+            -float(a["risk_score"]),
+            LEVEL_ORDER.get(a["level"], 9),
+            -float(a["score"]),
+        )
+    )
     return alerts
 
 

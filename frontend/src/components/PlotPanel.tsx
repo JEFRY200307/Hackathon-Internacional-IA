@@ -52,9 +52,11 @@ export function PlotPanel({ spec }: { spec: PlotlySpec }) {
       <div ref={ref} className="plot" />
       {spec.provenance && spec.provenance.length > 0 && (
         <figcaption>
-          {spec.provenance.map((p) => (
-            <span key={p.variable}>
-              {p.variable} · {p.source} · n={p.n} · {p.patient_id}
+          {spec.provenance.map((p, index) => (
+            <span key={`${p.variable || p.scope_id || "source"}-${index}`}>
+              {p.variable
+                ? `${p.variable} · ${p.source} · n=${p.n} · ${p.patient_id}`
+                : `${p.source} · ${p.scope_id || "alcance"} · ${p.patient_count || 0} pacientes`}
             </span>
           ))}
         </figcaption>

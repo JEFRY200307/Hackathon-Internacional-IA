@@ -23,6 +23,34 @@ Responsabilidades:
 - **Backend:** valida el contrato, calcula KPI, filtra filas, recupera evidencia y construye Plotly.
 - **Frontend:** renderiza componentes conocidos y permite únicamente acciones catalogadas.
 
+### Grounding antes de ejecutar
+
+Cada pregunta pasa por cuatro capas:
+
+1. **Planner:** convierte lenguaje libre en `DashboardQueryPlan`; no produce datos ni razonamiento visible.
+2. **Resolver:** aplica filtros catalogados y crea un `ResolvedScope` con los pacientes reales incluidos.
+3. **Composer:** genera widgets RISA UI que referencian el `scope_id`; no puede ampliar la cohorte.
+4. **Verifier:** comprueba citas, filas, series, evidencias y menciones `PAT-*` antes de responder.
+
+El plan admite detalle, cohorte, comparación, tendencia, distribución y calidad. Los filtros permitidos incluyen IDs, nivel, prioridad, edad, sexo, región, programa de atención y rangos de score/riesgo. No se aceptan SQL ni expresiones ejecutables.
+
+Ejemplos:
+
+```text
+Crea un dashboard de pacientes mayores de 60 años, URBAN,
+con risk_score entre 0.6 y 1.0.
+```
+
+```text
+Compara pacientes CRITICO y ALTO agrupando por care_program.
+```
+
+```text
+Muestra la tendencia de heart_rate y spo2 para PAT-0724.
+```
+
+La respuesta incluye `query_plan`, `resolved_scope` y `warnings`. Las fuentes de paciente/alerta deben pertenecer al alcance; reglas y variables pueden ser globales.
+
 ## 2. Ejecutar el sistema
 
 ### Backend
@@ -175,12 +203,20 @@ Al seleccionar una alerta, el frontend abre el detalle existente.
 
 Genera un gráfico Plotly `line`, `bar` o `scatter`.
 
+Análisis disponibles:
+
+- `patient_series`: serie de un paciente explícito.
+- `cohort_timeseries`: promedio temporal dentro de una cohorte.
+- `distribution`: distribución de edad o scores.
+- `cohort_comparison`: conteo o promedio entre cohortes.
+- `alert_breakdown`: conteo por nivel, prioridad, patrón o dimensión permitida.
+
 Variables permitidas:
 
 - Vitales: `heart_rate`, `spo2`, `resp_rate`, `sbp`, `dbp`, `temp`.
 - Laboratorio sintético: `LAB_A`, `LAB_B`, `LAB_C`, `LAB_D`.
 
-Cada gráfico requiere entre 1 y 4 variables. El `patient_id` debe existir en el dataset.
+Las series requieren entre 1 y 4 variables. Los análisis agregados referencian `scope_id` y opcionalmente `cohort`; el backend resuelve todos los puntos.
 
 ### `table`
 
@@ -222,8 +258,10 @@ Muestra texto plano para notas, alcance o datos faltantes. React no interpreta e
 - Solo existe la acción `select_alert`; los filtros interactivos dentro del dashboard todavía no regeneran el documento.
 - El protocolo devuelve un documento completo por turno; no hay streaming ni actualizaciones parciales como en A2UI.
 - Los dashboards no se persisten ni se comparten entre sesiones o instituciones.
-- MockLLM genera variantes deterministas por palabras clave y no comprende solicitudes tan flexibles como el LLM remoto.
+- MockLLM usa el mismo resolver seguro, pero su interpretación determinista cubre menos expresiones lingüísticas que el Planner remoto.
+- Una cohorte solo puede usar filtros catalogados; preguntas que requieran joins o dimensiones no declaradas deben ampliar primero el schema.
 - `LAB_A`–`LAB_D` son marcadores sintéticos sin significado clínico real.
+- Anomaly/Pattern se evalúan contra etiqueta débil; sus scores son apoyo secundario y no precisión clínica.
 - No existe autenticación ni autorización multiinstitucional en el alcance del prototipo.
 
 ## 8. Probar la API sin el frontend

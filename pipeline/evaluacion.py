@@ -24,6 +24,7 @@ secundario en cada alerta — no se entrenan de nuevo en cada request.
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import asdict
 
 import numpy as np
@@ -148,6 +149,58 @@ def load_best_models() -> tuple[tuple[object, dict], tuple[object, dict]]:
     anomaly = joblib.load(ANOMALY_MODEL_PATH), json.loads(ANOMALY_METADATA_PATH.read_text(encoding="utf-8"))
     pattern = joblib.load(PATTERN_MODEL_PATH), json.loads(PATTERN_METADATA_PATH.read_text(encoding="utf-8"))
     return anomaly, pattern
+
+
+def model_artifact_provenance() -> dict:
+    """Identidad verificable de los estimadores persistidos usados para scoring."""
+    (_, anomaly_meta), (_, pattern_meta) = load_best_models()
+
+    def sha256(path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    anomaly_hash = sha256(ANOMALY_MODEL_PATH)
+    pattern_hash = sha256(PATTERN_MODEL_PATH)
+    fingerprint = hashlib.sha256(f"{anomaly_hash}:{pattern_hash}".encode()).hexdigest()
+    return {
+        "source": "persisted_artifact",
+        "fingerprint": fingerprint,
+        "anomaly": {
+            "chosen_model": anomaly_meta["chosen_model"],
+            "artifact": ANOMALY_MODEL_PATH.name,
+            "sha256": anomaly_hash,
+        },
+        "pattern": {
+            "chosen_model": pattern_meta["chosen_model"],
+            "artifact": PATTERN_MODEL_PATH.name,
+            "sha256": pattern_hash,
+        },
+    }
+
+
+def score_from_persisted_models(drafts: list[AlertDraft]) -> tuple[dict[str, float], dict[str, float], dict]:
+    """Recarga los `.joblib` y usa exactamente esos artefactos para puntuar."""
+    (anomaly_pipeline, anomaly_meta), (pattern_pipeline, _) = load_best_models()
+    X_all, ids_all = feature_matrix(drafts, [draft.patient_id for draft in drafts])
+    anomaly_scores = deteccion_anomalias.score_all(
+        anomaly_pipeline.named_steps["scaler"],
+        anomaly_pipeline.named_steps["model"],
+        anomaly_meta["chosen_model"],
+        X_all,
+    )
+    pattern_scores = modelado_patrones.score_all(
+        pattern_pipeline.named_steps["scaler"],
+        pattern_pipeline.named_steps["model"],
+        X_all,
+    )
+    return (
+        {pid: float(score) for pid, score in zip(ids_all, anomaly_scores)},
+        {pid: float(score) for pid, score in zip(ids_all, pattern_scores)},
+        model_artifact_provenance(),
+    )
 
 
 def _serialize_candidates(candidates: dict) -> dict:

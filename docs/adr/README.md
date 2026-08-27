@@ -11,3 +11,4 @@
 | [ADR-0007](0007-modelo-preentrenado-http.md) | Modelo remoto HTTP + fallback |
 | [ADR-0008](0008-pipeline-crispdm-datos-reales.md) | `pipeline/` propio: CRISP-DM sobre RISA Data V1.0 real |
 | [ADR-0009](0009-evaluacion-etiqueta-debil.md) | Evaluación train/val/test con etiqueta débil (sin Gold Standard) |
+| [ADR-0010](0010-grounding-consultas-risa-ui.md) | Planner, scopes y verificación determinista para RISA UI |

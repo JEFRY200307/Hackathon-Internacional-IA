@@ -8,6 +8,8 @@ function Provenance({ value }: { value?: RisaUiProvenance }) {
       Fuente: {value.source}
       {typeof value.count === "number" ? ` · ${value.count} registros` : ""}
       {value.metric ? ` · ${value.metric}` : ""}
+      {value.scope_id ? ` · ${value.scope_id}` : ""}
+      {value.cohort ? ` · cohorte ${value.cohort}` : ""}
     </p>
   );
 }
@@ -83,6 +85,8 @@ export function RisaUiCanvas({ doc, onSelectAlert }: Props) {
                         onClick={() => interactive && onSelectAlert(alert.id)}
                       >
                         <b className={`lvl ${alert.level}`}>{alert.level}</b> {alert.patient_id} — {alert.title}
+                        {alert.priority_level ? ` · ${alert.priority_level}` : ""}
+                        {typeof alert.risk_score === "number" ? ` · riesgo ${alert.risk_score.toFixed(3)}` : ""}
                       </button>
                     </li>
                   ))}
