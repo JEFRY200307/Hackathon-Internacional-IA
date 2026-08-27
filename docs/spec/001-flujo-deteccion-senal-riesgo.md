@@ -1,6 +1,6 @@
 # SPEC-001 — Detección y priorización de señales de riesgo sobre datos heterogéneos de RISA
 
-- Estado: `borrador`
+- Estado: `implementado` — sobre RISA Data V1.0 real, ver [`SPEC-008`](008-pipeline-crispdm.md) (integración/calidad) y [`SPEC-009`](009-evaluacion-y-entregable-oficial.md) (modelado/evaluación/entregable)
 - Área: 1 Salud
 - Relaciona: RF-01, RF-02, RF-03, RF-04, RF-05, RF-06, RF-08, RNF-04, RNF-07, RN-01, RN-02, RN-06
 - Autor: equipo
@@ -28,7 +28,7 @@ Un profesional de salud (o analista) de una institución de RISA monitorea a var
 
 ## Entradas
 
-- Fuentes RISA seleccionadas para el MVP (a confirmar con el esquema real de Data V1.0; candidatas: `vital_signs`, `laboratory`, opcionalmente `wearables`).
+- Fuentes RISA usadas: `vital_signs`, `laboratory_results`, `wearable_observations` (contexto de actividad), `device_observations` (calidad de señal) — confirmado sobre el esquema real de Data V1.0, ver `SPEC-008`.
 - ID sintético de paciente como clave de unión.
 - Ventana temporal de trabajo (definida por el equipo, no prescrita por el reto).
 - Reglas/umbrales dinámicos y/o el modelo simple elegido en `ADR-0002`.
@@ -45,17 +45,17 @@ Un profesional de salud (o analista) de una institución de RISA monitorea a var
 - Selección automática de modelo entre múltiples candidatos (ver ADR-0002: se comparan 1–2 a mano).
 - Cruce de datos entre instituciones distintas de RISA.
 - Ingesta de imágenes médicas o texto libre de historia clínica.
-- Búsqueda en lenguaje natural sobre el dashboard (stretch, no P0).
+- [ ] Búsqueda en lenguaje natural sobre el dashboard — cubierto por SPEC-002 (chat) y SPEC-007 (RAG); ya no es stretch.
 - Reentrenamiento o mejora automática del modelo a partir de las decisiones humanas (RF-09 solo registra, no realimenta en vivo).
 
 ## Criterios de aceptación
 
-- [ ] El pipeline corre de punta a punta sobre ≥2 fuentes reales de Data V1.0 (o el sample propio si V1.0 no llega a tiempo, SUP-01).
-- [ ] Al menos 1 alerta mostrada corresponde a un patrón que solo es visible combinando fuentes/tiempo (no un umbral de una sola variable) — evidencia de OBJ-01.
-- [ ] Al menos 1 caso de baja relevancia (variación esperada, outlier transitorio) aparece con prioridad baja y motivo visible, no oculto — evidencia de OBJ-03 / RN-02.
-- [ ] Toda alerta abierta muestra evidencia (datos) y explicación (texto generado) en secciones visualmente distintas — RN-06.
-- [ ] Si falta una fuente para un paciente, el sistema lo indica explícitamente en vez de omitir el caso silenciosamente — RF-08.
-- [ ] El README documenta qué tratamiento de calidad se aplicó y por qué (trazabilidad de la decisión del curador).
+- [x] El pipeline corre de punta a punta sobre las fuentes reales de Data V1.0 (1000 pacientes; el sample propio queda como fallback, SUP-01).
+- [x] Al menos 1 alerta mostrada corresponde a un patrón que solo es visible combinando fuentes/tiempo (`PROGRESSIVE_MULTISOURCE`, `EARLY_SIGNAL`) — evidencia de OBJ-01.
+- [x] Al menos 1 caso de baja relevancia (`CONTEXTUAL`, `TRANSIENT`) aparece con prioridad `DESCARTADO` y motivo visible, no oculto — evidencia de OBJ-03 / RN-02 (413/1000 en la corrida de referencia).
+- [x] Toda alerta abierta muestra evidencia (datos) y explicación (texto generado) en secciones visualmente distintas — RN-06.
+- [x] Si falta una fuente para un paciente, el sistema lo indica explícitamente (`MISSING_SOURCE`) en vez de omitir el caso silenciosamente — RF-08.
+- [x] El README y `docs/spec/008-pipeline-crispdm.md` documentan qué tratamiento de calidad se aplicó y por qué.
 
 ## Riesgos y fallback
 

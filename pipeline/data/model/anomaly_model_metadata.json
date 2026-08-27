@@ -1,0 +1,203 @@
+{
+  "family": "Anomaly Model (Negocio.md 1.4.2)",
+  "chosen_model": "mad",
+  "feature_keys": [
+    "hr_mean",
+    "hr_slope",
+    "spo2_min",
+    "spo2_slope",
+    "rr_slope",
+    "sbp_last",
+    "sbp_slope",
+    "temp_mean",
+    "missing_lab",
+    "activity_frac",
+    "quality_median",
+    "lab_rise_max_frac",
+    "sleep_frac"
+  ],
+  "labels_source": "proxy/weak — RISA Data V1.0 no incluye Gold Standard (ver 02_KIT_ENTREGA)",
+  "selection_rule": "Mayor F1 promedio en validación cruzada de 5 folds sobre train+val combinados entre los candidatos del Anomaly Model ('zscore', 'mad', 'iqr', 'isolation_forest', 'local_outlier_factor', 'autoencoder_mlp') (desempate: precisión). El modelo ganador se reentrena sobre todo train+val y se evalúa una sola vez sobre test, nunca usado en la selección.",
+  "metrics": {
+    "zscore": {
+      "cv": {
+        "precision": 0.138,
+        "recall": 0.414,
+        "f1": 0.207,
+        "roc_auc": 0.821,
+        "confusion_matrix": {
+          "tp": 12,
+          "fp": 75,
+          "fn": 17,
+          "tn": 746
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.235,
+        "recall": 1.0,
+        "f1": 0.381,
+        "roc_auc": 0.959,
+        "confusion_matrix": {
+          "tp": 4,
+          "fp": 13,
+          "fn": 0,
+          "tn": 133
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "mad": {
+      "cv": {
+        "precision": 0.154,
+        "recall": 0.483,
+        "f1": 0.233,
+        "roc_auc": 0.735,
+        "confusion_matrix": {
+          "tp": 14,
+          "fp": 77,
+          "fn": 15,
+          "tn": 744
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.071,
+        "recall": 0.25,
+        "f1": 0.111,
+        "roc_auc": 0.664,
+        "confusion_matrix": {
+          "tp": 1,
+          "fp": 13,
+          "fn": 3,
+          "tn": 133
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "iqr": {
+      "cv": {
+        "precision": 0.098,
+        "recall": 0.31,
+        "f1": 0.149,
+        "roc_auc": 0.724,
+        "confusion_matrix": {
+          "tp": 9,
+          "fp": 83,
+          "fn": 20,
+          "tn": 738
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.133,
+        "recall": 0.5,
+        "f1": 0.211,
+        "roc_auc": 0.899,
+        "confusion_matrix": {
+          "tp": 2,
+          "fp": 13,
+          "fn": 2,
+          "tn": 133
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "isolation_forest": {
+      "cv": {
+        "precision": 0.135,
+        "recall": 0.414,
+        "f1": 0.203,
+        "roc_auc": 0.807,
+        "confusion_matrix": {
+          "tp": 12,
+          "fp": 77,
+          "fn": 17,
+          "tn": 744
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.231,
+        "recall": 0.75,
+        "f1": 0.353,
+        "roc_auc": 0.95,
+        "confusion_matrix": {
+          "tp": 3,
+          "fp": 10,
+          "fn": 1,
+          "tn": 136
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "local_outlier_factor": {
+      "cv": {
+        "precision": 0.146,
+        "recall": 0.448,
+        "f1": 0.22,
+        "roc_auc": 0.811,
+        "confusion_matrix": {
+          "tp": 13,
+          "fp": 76,
+          "fn": 16,
+          "tn": 745
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.188,
+        "recall": 0.75,
+        "f1": 0.3,
+        "roc_auc": 0.957,
+        "confusion_matrix": {
+          "tp": 3,
+          "fp": 13,
+          "fn": 1,
+          "tn": 133
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "autoencoder_mlp": {
+      "cv": {
+        "precision": 0.132,
+        "recall": 0.414,
+        "f1": 0.2,
+        "roc_auc": 0.743,
+        "confusion_matrix": {
+          "tp": 12,
+          "fp": 79,
+          "fn": 17,
+          "tn": 742
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.267,
+        "recall": 1.0,
+        "f1": 0.421,
+        "roc_auc": 0.933,
+        "confusion_matrix": {
+          "tp": 4,
+          "fp": 11,
+          "fn": 0,
+          "tn": 135
+        },
+        "n": 150,
+        "positives": 4
+      }
+    }
+  }
+}

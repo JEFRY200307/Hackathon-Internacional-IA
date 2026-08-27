@@ -1,0 +1,16 @@
+﻿variable_code,variable_name,domain,canonical_unit,plausibility_min,plausibility_max,nominal_sampling,analysis_role
+HR,Heart Rate,VITAL,bpm,20,220,5-15 min,PERSONAL_BASELINE_RELEVANT
+RR,Respiratory Rate,VITAL,rpm,5,60,10-30 min,PERSONAL_BASELINE_RELEVANT
+SpO2,Oxygen Saturation,VITAL,%,50,100,5-15 min,PERSONAL_BASELINE_RELEVANT
+TEMP,Temperature,VITAL,degC,30,45,30-240 min,PERSONAL_BASELINE_RELEVANT
+SBP,Systolic Blood Pressure,VITAL,mmHg,60,240,30-360 min,PERSONAL_BASELINE_RELEVANT
+DBP,Diastolic Blood Pressure,VITAL,mmHg,30,150,30-360 min,PERSONAL_BASELINE_RELEVANT
+WEARABLE_HR,Wearable Heart Rate,WEARABLE,bpm,20,220,5-15 min,CONTEXT_SENSITIVE
+STEPS,Step Count,WEARABLE,count,0,1000,5-15 min,CONTEXT
+ACTIVITY_LEVEL,Activity Level,CONTEXT,category,,,INTERVAL,CONTEXT
+SLEEP_STATE,Sleep State,CONTEXT,category,,,EPISODE,CONTEXT
+SIGNAL_QUALITY_INDEX,Signal Quality Index,DEVICE,ratio,0,1,PERIODIC,QUALITY
+LAB_A,Synthetic laboratory marker A,LAB,uA,0,50,EVENT,MULTISOURCE
+LAB_B,Synthetic laboratory marker B,LAB,uB,0,300,EVENT,MULTISOURCE
+LAB_C,Synthetic laboratory marker C,LAB,uC,0,10,EVENT,MULTISOURCE
+LAB_D,Synthetic laboratory marker D,LAB,uD,0,10,EVENT,MULTISOURCE

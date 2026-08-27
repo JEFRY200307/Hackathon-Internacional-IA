@@ -1,0 +1,143 @@
+{
+  "family": "Pattern Model (Negocio.md 1.4.3)",
+  "chosen_model": "xgboost",
+  "feature_keys": [
+    "hr_mean",
+    "hr_slope",
+    "spo2_min",
+    "spo2_slope",
+    "rr_slope",
+    "sbp_last",
+    "sbp_slope",
+    "temp_mean",
+    "missing_lab",
+    "activity_frac",
+    "quality_median",
+    "lab_rise_max_frac",
+    "sleep_frac"
+  ],
+  "labels_source": "proxy/weak — RISA Data V1.0 no incluye Gold Standard (ver 02_KIT_ENTREGA)",
+  "selection_rule": "Mayor F1 promedio en validación cruzada de 5 folds sobre train+val combinados entre los candidatos del Pattern Model ('logistic_regression', 'random_forest', 'xgboost', 'lightgbm') (desempate: precisión). El modelo ganador se reentrena sobre todo train+val y se evalúa una sola vez sobre test, nunca usado en la selección.",
+  "metrics": {
+    "logistic_regression": {
+      "cv": {
+        "precision": 0.182,
+        "recall": 0.759,
+        "f1": 0.293,
+        "roc_auc": 0.919,
+        "confusion_matrix": {
+          "tp": 22,
+          "fp": 99,
+          "fn": 7,
+          "tn": 722
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.182,
+        "recall": 0.5,
+        "f1": 0.267,
+        "roc_auc": 0.836,
+        "confusion_matrix": {
+          "tp": 2,
+          "fp": 9,
+          "fn": 2,
+          "tn": 137
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "random_forest": {
+      "cv": {
+        "precision": 0.5,
+        "recall": 0.034,
+        "f1": 0.065,
+        "roc_auc": 0.95,
+        "confusion_matrix": {
+          "tp": 1,
+          "fp": 1,
+          "fn": 28,
+          "tn": 820
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "roc_auc": 0.998,
+        "confusion_matrix": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 4,
+          "tn": 146
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "xgboost": {
+      "cv": {
+        "precision": 0.538,
+        "recall": 0.483,
+        "f1": 0.509,
+        "roc_auc": 0.965,
+        "confusion_matrix": {
+          "tp": 14,
+          "fp": 12,
+          "fn": 15,
+          "tn": 809
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.667,
+        "roc_auc": 0.993,
+        "confusion_matrix": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 2,
+          "tn": 146
+        },
+        "n": 150,
+        "positives": 4
+      }
+    },
+    "lightgbm": {
+      "cv": {
+        "precision": 0.647,
+        "recall": 0.379,
+        "f1": 0.478,
+        "roc_auc": 0.951,
+        "confusion_matrix": {
+          "tp": 11,
+          "fp": 6,
+          "fn": 18,
+          "tn": 815
+        },
+        "n": 850,
+        "positives": 29
+      },
+      "test": {
+        "precision": 1.0,
+        "recall": 0.25,
+        "f1": 0.4,
+        "roc_auc": 0.991,
+        "confusion_matrix": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 3,
+          "tn": 146
+        },
+        "n": 150,
+        "positives": 4
+      }
+    }
+  }
+}

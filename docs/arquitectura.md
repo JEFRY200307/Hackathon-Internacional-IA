@@ -28,7 +28,7 @@ El hilo conductor de las tres partes es el mismo que pide el reto: **datos fragm
 | Agente de datos (limpieza/EDA) | 1 agente de perfilado que sugiere tratamiento de calidad; lo aprueba un curador humano | Selección y comparación automática de múltiples estrategias de limpieza |
 | Agente de modelado | Se comparan 1–2 enfoques a mano (regla dinámica vs. 1 modelo simple); no hay agente que "decide y entrena solo" | Agente que prueba varios modelos, los compara y elige, con reentrenamiento periódico |
 | Plataforma institucional | No se construye; el prototipo corre para una institución/dataset único | Modelo adaptado por institución, cruce de información entre instituciones, identificación/validación de pacientes entre redes |
-| Agente conversacional + dashboard | Dashboard fijo (ranking de alertas + tarjeta de evidencia); 1 agente de explicación redacta el texto de cada alerta | Agente conversacional de lenguaje natural abierto sobre todo el dataset integrado |
+| Agente conversacional + dashboard | Chat anclado a tools (dataset, alertas, UCP, Plotly, RAG, modelo HTTP) + cola de alertas | Chat de propósito general y multi-institución |
 
 El detalle de por qué se corta cada pieza (y qué tan reversible es el corte) está en `ADR-0002`. Este documento se queda con la idea completa; el ADR se queda con la decisión de alcance.
 
@@ -84,18 +84,19 @@ Es el mismo flujo, comprimido a lo que un equipo de 3 personas puede tener funci
 
 ```mermaid
 flowchart LR
-    A["Fuentes RISA\n(CSV / parquet:\nvitales + laboratorio)"] --> B["Ingesta + alineación\ntemporal\n(pandas + pydantic)"]
-    B --> C{"Agente de datos\n(perfilado, LLM)"}
-    C -->|"aprueba / ajusta"| D["Humano curador"]
-    D --> E["Detección: regla dinámica\n+ 1 modelo simple\n(pandas / scikit-learn)"]
-    E --> F["Scoring y\npriorización"]
-    F --> G["Agente de explicación\n(evidencia → texto, LLM)"]
-    G --> H["Dashboard\n(Streamlit + Plotly)"]
-    H --> I["Humano: profesional\nde salud"]
-    I -.->|"registro de revisión\n(no reentrena en vivo)"| F
+    A["Fuentes RISA\n(sample / Data V1.0)"] --> B["Ingesta + alineación\n(pandas)"]
+    B --> E["Detección: reglas\n+ Isolation Forest local"]
+    E --> F["Alertas por nivel"]
+    F --> RAG["Índice RAG"]
+    F --> API["FastAPI"]
+    M["Modelo preentrenado\n(otro proyecto HTTP)"] -.-> API
+    LLM["gpt-4o + tools\n(MockLLM si no hay key)"] --> API
+    API --> UI["React: chat + UCP\n+ Plotly + cola"]
+    UI --> I["Profesional de salud"]
+    I -.->|"HITL review"| F
 ```
 
-Solo dos cajas de este diagrama son "agente" en el sentido de usar un LLM (perfilado de datos y explicación de alertas); el resto es código determinista. Esa es la decisión de `ADR-0002`.
+El LLM no toca el scoring: llama tools. UCP y Plotly se hidratan en el servidor. Ver `ADR-0003`…`0007`.
 
 ---
 
@@ -112,9 +113,9 @@ Pensado para 12 h, sin infraestructura que montar, y con cada pieza reemplazable
 | Detección de señales | Reglas dinámicas en `pandas` + `scikit-learn` (p. ej. `IsolationForest`) como segundo enfoque comparado a mano | Cubre el "no es un umbral estático" del reto sin apostar todo a que un solo modelo entrene bien en el tiempo disponible |
 | Agente de datos / agente de explicación | Llamada directa a una API de LLM (Claude o equivalente, intercambiable) con salida estructurada (`pydantic`/`instructor`) | Sin framework de agentes (LangChain, CrewAI, etc.): dos llamadas bien definidas con prompt + esquema de salida son más rápidas de depurar en 12 h que una orquestación genérica |
 | Orquestación del pipeline | Un único script/entrypoint (`scripts/run_pipeline.py`) | El pipeline es lineal (ver diagrama de la sección 4); no hace falta cola de mensajes ni workers para el prototipo |
-| Dashboard | `Streamlit` | Ranking + tarjeta de evidencia + gráfico de series temporales en una sola app, sin separar backend/frontend — máxima velocidad de desarrollo |
-| Visualización | `Plotly` (vía Streamlit) | Series temporales interactivas por paciente, necesarias para que la evidencia se "vea" y no solo se lea |
-| Backend/API (opcional) | `FastAPI`, solo si el equipo decide separar el pipeline del dashboard | No es necesario para el MVP; se añade solo si sobra tiempo o si se quiere exponer el pipeline como servicio |
+| Dashboard / chat | React + Vite + Plotly | Chat, canvas UCP y gráficos interactivos (`ADR-0003`) |
+| Visualización | Plotly.js | Series temporales interactivas hidratadas por el backend |
+| Backend | FastAPI | Dataset, alertas, RAG, tools del LLM, adaptador HTTP del modelo |
 | Empaquetado y arranque | `requirements.txt` (o `pyproject.toml`) + `Makefile`/`run.sh` con un solo comando | Cumple RNF-05 ("alguien del equipo levanta el prototipo con un comando documentado") |
 | Configuración/secretos | `.env` + `.env.example`, fuera de git | Cumple RNF-06/RNF-09; la clave del LLM y cualquier ruta a datos "oficiales" nunca se commitean |
 
@@ -122,45 +123,46 @@ Pensado para 12 h, sin infraestructura que montar, y con cada pieza reemplazable
 
 ## 6. Árbol de carpetas propuesto
 
-Hoy el repositorio solo tiene `docs/`. Esta es la estructura de código que soporta el flujo de la sección 4, alineada con el stack de la sección 5:
+Esta es la estructura real del repositorio, alineada con el stack de la sección 5 y con el pipeline CRISP-DM añadido en `ADR-0008`:
 
 ```
 Hackathon-Internacional-IA/
 ├── README.md
-├── .env.example
-├── requirements.txt
-├── Makefile                        # o run.sh — un comando levanta todo (RNF-05)
-├── docs/                           # fuente de verdad funcional (ya existe)
-│   ├── definicion.md
-│   ├── arquitectura.md             # este documento
-│   ├── adr/
-│   │   ├── 0001-usar-adrs.md
-│   │   └── 0002-arquitectura-pipeline-agentico-crispdm.md
-│   ├── spec/
-│   │   └── 001-flujo-deteccion-senal-riesgo.md
-│   └── archetypes/
-├── data/
-│   ├── raw/                        # fuentes RISA sin tocar (gitignored si pesan o son "oficiales")
-│   ├── interim/                    # datos alineados/tratados tras aprobación del curador
-│   └── sample/                     # sample sintético propio — fallback si Data V1.0 no llega (SUP-01)
-├── src/
-│   ├── ingestion/                  # carga + validación de esquema por fuente (RF-01)
-│   ├── quality/
-│   │   └── data_agent.py           # agente de datos: perfilado + sugerencias de limpieza (RF-02)
-│   ├── analysis/                   # alineación temporal, features multivariable (RF-03)
-│   ├── scoring/                    # regla dinámica + modelo comparado, ranking de prioridad (RF-04, RF-06)
-│   ├── explain/
-│   │   └── explanation_agent.py    # agente de explicación: evidencia -> texto (RF-05, RN-06)
-│   └── dashboard/                  # app Streamlit: ranking + tarjeta de evidencia (RF-05, RF-07)
-├── scripts/
-│   └── run_pipeline.py             # entrypoint único: ingest -> quality -> analysis -> scoring -> explain
-├── notebooks/
-│   └── eda.ipynb                   # exploración inicial del dataset, no es parte del prototipo final
-└── tests/
-    └── ...                         # pruebas mínimas de ingestión y scoring
+├── docs/                            # definición, specs, ADR, guías, material oficial del reto (menos el dataset)
+├── pipeline/                        # CRISP-DM sobre RISA Data V1.0 (componente propio, sin FastAPI ni React)
+│   ├── data/
+│   │   ├── raw/                     # RISA Data V1.0 oficial — inmutable
+│   │   ├── clean/                   # vitales/labs limpios y normalizados (Parquet, regenerable)
+│   │   ├── features/                # vector de features por paciente (Parquet, regenerable)
+│   │   ├── model/                   # modelos ganadores persistidos (.joblib) + metadata — versionado
+│   │   ├── results/                 # signals.csv + evidence.csv, el entregable oficial
+│   │   └── cache/                   # PipelineResult serializado — regenerable, no versionado
+│   ├── comprension_negocio.md       # fase 1 — preguntas de negocio (mapea docs/Negocio.md a código)
+│   ├── comprension_datos.py         # fase 2 — carga cruda + perfilado
+│   ├── preparacion_datos.py         # fase 3 — limpieza, unidades, calidad
+│   ├── modelado.py                  # fase 4 — features + motor de reglas calibradas
+│   ├── motor_contexto.py            # Context Engine — actividad (wearable) + sueño (patient_context)
+│   ├── deteccion_anomalias.py       # Anomaly Model — estadística + ML + DL ligero, comparados
+│   ├── modelado_patrones.py         # Pattern Model — baseline + RF/XGBoost/LightGBM, comparados
+│   ├── fusion_evidencia.py          # Evidence Fusion — PRIMARY/SUPPORTING/CONTEXT/QUALITY
+│   ├── motor_riesgo.py              # Risk Engine — risk_score [0,1]
+│   ├── motor_prioridad.py           # Priority Engine — LOW/MEDIUM/HIGH/CRITICAL
+│   ├── explicacion.py               # Explanation — redacta desde la evidencia fusionada
+│   ├── evaluacion.py                # fase 5 — orquesta Anomaly/Pattern Model, persiste ambos ganadores
+│   ├── despliegue.py                # fase 6 — orquesta todo, caché + export oficial
+│   ├── notebooks/                   # EDA y comparación de modelos, ejecutado con outputs reales
+│   └── run_pipeline.py              # CLI
+├── backend/                         # FastAPI: sirve el pipeline, alertas, RAG, LLM, UCP
+│   ├── app/
+│   ├── requirements.txt
+│   └── .env.example
+└── frontend/                        # React + Vite: chat, canvas UCP, Plotly, alertas
+    ├── src/
+    └── package.json
 ```
 
 Notas rápidas:
-- `data/raw` y cualquier dato "oficial" del reto quedan fuera de git (ver `.gitignore` y RNF-06/RNF-09); solo `data/sample` se versiona.
-- `src/quality/data_agent.py` y `src/explain/explanation_agent.py` son, literalmente, los dos únicos puntos del código donde se llama a un LLM — todo lo demás en `src/` es determinista y se puede probar sin red.
-- Esta estructura se confirma (o ajusta) en `ADR-0003` junto con el stack, apenas se conozca el esquema real de `Data V1.0`.
+- El backend **no procesa datos**: `backend/app/data/loader.py` es un facade de una línea sobre `pipeline.despliegue` (`ADR-0008`).
+- `pipeline/data/clean/`, `pipeline/data/features/` y `pipeline/data/cache/` quedan fuera de git (regenerables); `pipeline/data/raw/` (dataset oficial, 100 % sintético), `pipeline/data/model/` (modelos ganadores) y `pipeline/data/results/` (entregable oficial) sí se versionan.
+- La llamada al LLM del chat (`backend/app/llm/orchestrator.py`) es, hoy, el único punto del código donde se invoca un modelo generativo — todo lo demás en `pipeline/` y en el resto de `backend/` es determinista y se puede probar sin red.
+- No existe dataset sintético de reemplazo: si `pipeline/data/raw/` no está presente, `pipeline.despliegue.build_dataset()` lanza `RisaDataNotFoundError` y el backend no arranca — RF-08 ("degradar con mensaje claro") se cumple fallando visiblemente, no inventando datos.

@@ -16,9 +16,12 @@ Fuente de verdad del prototipo de la Hackathon. Aquí viven la definición del p
 | --- | --- |
 | [`definicion.md`](definicion.md) | Documento vivo del proyecto (objetivos, RF, RNF, RN, restricciones) |
 | [`arquitectura.md`](arquitectura.md) | La idea explicada en prosa, diagramas de arquitectura (visión completa y MVP), stack propuesto y árbol de carpetas |
-| [`spec/`](spec/) | Especificaciones de producto / flujos |
-| [`adr/`](adr/) | Architecture Decision Records |
+| [`spec/`](spec/) | SPEC-001 … SPEC-009 (flujo, chat, UCP, gráficos, modelo, alertas, RAG, pipeline CRISP-DM, evaluación) |
+| [`adr/`](adr/) | ADR-0001 … ADR-0009 |
+| [`guias/`](guias/) | Estándares de API, arquitectura y patrones, frontend, seguridad — el *cómo* se construye |
 | [`archetypes/`](archetypes/) | Plantillas reutilizables |
+| [`Participantes Salud/`](Participantes%20Salud/) | Material oficial de referencia del reto (guías, kit de entrega) — el dataset RISA Data V1.0 vive en [`pipeline/data/raw/`](../pipeline/data/raw/) |
+| [`Negocio.md`](Negocio.md), [`diccionario_datos.md`](diccionario_datos.md), [`data_inventory_report.md`](data_inventory_report.md) | Comprensión del negocio y de los datos (CRISP-DM fases 1-2), mapeadas a código en [`pipeline/comprension_negocio.md`](../pipeline/comprension_negocio.md) |
 
 ## Convención de IDs
 

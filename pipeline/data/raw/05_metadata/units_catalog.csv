@@ -1,0 +1,14 @@
+﻿unit_code,unit_name,dimension,canonical_unit,conversion_factor,conversion_offset
+bpm,beats per minute,rate,bpm,1,0
+rpm,respirations per minute,rate,rpm,1,0
+%,percent,ratio,%,1,0
+degC,degrees Celsius,temperature,degC,1,0
+degF,degrees Fahrenheit,temperature,degC,0.5555555555555556,-17.77777777777778
+mmHg,millimeters mercury,pressure,mmHg,1,0
+count,count,count,count,1,0
+ratio,ratio,ratio,ratio,1,0
+category,categorical,category,category,1,0
+uA,synthetic lab unit A,lab,uA,1,0
+uB,synthetic lab unit B,lab,uB,1,0
+uC,synthetic lab unit C,lab,uC,1,0
+uD,synthetic lab unit D,lab,uD,1,0

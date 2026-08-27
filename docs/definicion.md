@@ -2,7 +2,7 @@
 
 Documento vivo. Aquí se acuerda **qué** vamos a construir, **para quién** y **con qué límites**. Las specs detallan flujos. Los ADR fijan decisiones técnicas.
 
-- Estado: `borrador — reto revelado`
+- Estado: `aceptado — app conversacional en construcción`
 - Área de desafío: `1 Salud e inteligencia de datos` — HealthSignal LATAM: Anticiparse al riesgo (Talento TECH, Hackathon Perú 2026), escenario ficticio RISA (Red Integrada de Salud Andina)
 - Horizonte: **12 horas** de desarrollo (1 día y medio)
 - Equipo: 3 personas (capacidades complementarias)
@@ -16,7 +16,7 @@ Documento vivo. Aquí se acuerda **qué** vamos a construir, **para quién** y *
 
 | Campo | Valor |
 | --- | --- |
-| Nombre del prototipo | `_pendiente_` (working title: **RISA Signal**) |
+| Nombre del prototipo | **RISA Signal** |
 | Tagline (una frase) | Convierte datos fragmentados de RISA en alertas priorizadas, explicables y trazables — sin sustituir el criterio clínico. |
 | Área | 1 Salud e inteligencia de datos |
 | Usuarios primarios | (a) Profesional de salud / analista clínico que revisa el ranking de alertas; (b) rol interno de curación de datos (ingeniero de datos o profesional con conocimiento de datos) que aprueba limpieza y enfoque de análisis antes de correr el pipeline |
@@ -46,7 +46,7 @@ Lo que **no** vamos a construir aunque sea "bonito". Sirve para defender recorte
 
 - Selección automática de modelo por un agente autónomo entre muchas alternativas — en su lugar, comparar 1–2 enfoques (regla dinámica vs. un modelo simple) y justificar cuál queda.
 - Cruce/federación de datos entre instituciones RISA y modelos adaptados por institución — se documenta como visión de escalamiento (pitch), no se construye.
-- Agente conversacional de lenguaje natural abierto sobre todo el dataset — como mucho, un buscador simple sobre el mismo store de evidencia, si sobra tiempo.
+- Agente conversacional de propósito general fuera de RISA (el chat SÍ está en el MVP, pero solo anclado a dataset, alertas, UCP, gráficos, modelo remoto y RAG; ver RF-10…RF-16).
 - Emisión de diagnóstico, prescripción o decisión clínica autónoma — el reto lo prohíbe explícitamente; la salida siempre es señal + prioridad + evidencia.
 - Reentrenamiento automático o loop de mejora continua de modelos en producción.
 - Dashboards personalizados por institución o multi-tenant real; un dashboard único que filtra por paciente/institución alcanza.
@@ -57,9 +57,10 @@ Lo que **no** vamos a construir aunque sea "bonito". Sirve para defender recorte
 
 ### Dentro
 
-- Flujo feliz: ingesta de 2–3 fuentes heterogéneas de RISA (p. ej. signos vitales + laboratorio [+ wearable]) → alineación temporal y tratamiento de calidad → detección de patrón multivariable/temporal → score de prioridad → tarjeta de evidencia y explicación → dashboard de consulta.
+- Flujo feliz: ingesta de 2–3 fuentes heterogéneas de RISA → alineación → detección → ranking de alertas → chat que consulta el dataset, compone dashboards UCP, gráficos interactivos y citas RAG.
 - 1 insight útil: ranking de pacientes/casos por prioridad de revisión, con motivo visible.
-- Fallback: si el modelo/analítica no da señal buena para un caso, la regla dinámica (combinación de variables + tendencia) sigue funcionando y sigue mostrando evidencia — nunca cae a "solo mostrar el dato crudo".
+- Integración HTTP con un modelo preentrenado de otro proyecto, con fallback local.
+- Fallback: si el LLM o el modelo remoto fallan, tools + reglas + MockLLM siguen demostrando el flujo.
 
 ### Fuera
 
@@ -67,7 +68,7 @@ Lo que **no** vamos a construir aunque sea "bonito". Sirve para defender recorte
 - Producto multi-tenant, auth completa, billing
 - Apps nativas, IoT hardware, despliegue productivo endurecido
 - Cobertura exhaustiva del dominio (el prototipo es una franja, no la plataforma)
-- Selección automática multi-modelo por agente autónomo, federación entre instituciones, agente conversacional NL de propósito general (ver no-objetivos, sección 2)
+- Selección automática multi-modelo por agente autónomo, federación entre instituciones, chat NL de propósito general fuera de RISA (ver no-objetivos, sección 2)
 - Ingesta de imágenes médicas o texto libre de historia clínica (posible fuente del reto, pero fuera de la ventana de 12 h salvo que sobre tiempo)
 
 ### Recorte de las 12 h
@@ -82,7 +83,7 @@ Cosas que damos por ciertas hasta que el reto las desmienta.
 
 | ID | Supuesto | Si es falso, qué hacemos |
 | --- | --- | --- |
-| SUP-01 | HealthSignal LATAM - Data V1.0 llega usable el día 1, sin etiquetas de riesgo (confirmado por el contexto oficial de RISA) | Construir un sample sintético propio con el mismo esquema y documentar el gap |
+| SUP-01 | ~~HealthSignal LATAM - Data V1.0 llega usable el día 1, sin etiquetas de riesgo~~ **Resuelto:** RISA Data V1.0 completo (1000 pacientes) está en `docs/Participantes Salud/` y es la **única** fuente de datos permitida, vía `pipeline/` ([ADR-0008](adr/0008-pipeline-crispdm-datos-reales.md)); no trae Gold Standard, tal como se anticipó | No hay dataset sintético de reemplazo: si el dataset no está presente, `pipeline.despliegue.build_dataset()` lanza `RisaDataNotFoundError` y el backend no arranca — RF-08 se cumple fallando con mensaje claro, no inventando datos |
 | SUP-02 | Hay red e (si aplica) cupo de API | Modo offline / cache / fixture |
 | SUP-03 | El jurado valora demo clara + trazabilidad más que SOTA (confirmado: la rúbrica pesa 30 pts en integración/priorización/explicabilidad y penaliza alertas sin evidencia) | Priorizar explicación del resultado sobre accuracy |
 | SUP-04 | Con 2–3 fuentes heterogéneas alineadas basta para demostrar el flujo completo (no hace falta consumir todas las fuentes de RISA) | Reducir aún más a 2 fuentes y documentar cuáles quedaron fuera |
@@ -101,9 +102,16 @@ Comportamiento observable. Cada RF debe poder señalarse en la demo. Estados: `p
 | RF-04 | El sistema asigna un nivel de riesgo/score/prioridad a cada situación identificada y produce un ranking de casos | Sistema | P0 | SPEC-001 | propuesto |
 | RF-05 | El usuario abre una alerta y ve su evidencia: variables involucradas, evolución temporal, fuente(s), patrón identificado y motivo de la prioridad asignada | Usuario | P0 | SPEC-001 | propuesto |
 | RF-06 | El sistema diferencia variación esperada de señal relevante para al menos un caso, evitando presentarlo como alerta de alta prioridad sin justificación | Sistema | P1 | SPEC-001 | propuesto |
-| RF-07 | El usuario filtra/ordena el listado de alertas (por prioridad, paciente, ventana de tiempo) | Usuario | P1 | | propuesto |
+| RF-07 | El usuario filtra/ordena el listado de alertas (por prioridad, paciente, ventana de tiempo) | Usuario | P1 | SPEC-006 | propuesto |
 | RF-08 | El sistema degrada con mensaje claro si una fuente falta o el análisis no produce señal para un caso, sin romper la demo | Sistema | P0 | | propuesto |
-| RF-09 | El usuario marca una alerta como revisada/confirmada/descartada; la acción queda registrada como parte de la trazabilidad (human-in-the-loop) | Usuario | P1 | | propuesto |
+| RF-09 | El usuario marca una alerta como revisada/confirmada/descartada; la acción queda registrada como parte de la trazabilidad (human-in-the-loop) | Usuario | P1 | SPEC-006 | propuesto |
+| RF-10 | El usuario conversa en lenguaje natural con un LLM sobre pacientes, alertas y el dataset de RISA | Usuario | P0 | SPEC-002 | propuesto |
+| RF-11 | El LLM consulta el dataset mediante herramientas (no inventa series); el usuario puede ver la traza de tools | Sistema | P0 | SPEC-002 | propuesto |
+| RF-12 | El usuario pide un dashboard y el sistema lo compone con UCP v1.0 (catálogo cerrado de widgets hidratados) | Usuario | P0 | SPEC-003 | propuesto |
+| RF-13 | El usuario pide un gráfico y ve una visualización interactiva (Plotly) con datos reales y procedencia | Usuario | P0 | SPEC-004 | propuesto |
+| RF-14 | El sistema consulta un modelo preentrenado expuesto por otro proyecto vía HTTP; si no responde, usa fallback local etiquetado | Sistema | P0 | SPEC-005 | propuesto |
+| RF-15 | El usuario ve y filtra la cola de alertas por nivel de riesgo (CRITICO…DESCARTADO) con evidencia | Usuario | P0 | SPEC-006 | propuesto |
+| RF-16 | Toda explicación de alerta o paciente recupera fragmentos RAG (evidencia/reglas) y los muestra como citas | Sistema | P0 | SPEC-007 | propuesto |
 
 ---
 
@@ -193,15 +201,16 @@ Instanciar riesgos nuevos con [`archetypes/riesgo.md`](archetypes/riesgo.md) y v
 
 ## 12. Stack (se cierra con ADR)
 
-| Capa | Candidatos (no decidido) | ADR |
+| Capa | Elección | ADR |
 | --- | --- | --- |
-| Interfaz / demo | Streamlit, FastAPI + frontend mínimo, Gradio | |
-| Datos | Pandas / DuckDB / SQLite | |
-| Inteligencia | Reglas → sklearn / statsmodels → LLM solo si el área lo exige | |
-| Visualización | Plotly, vista de grafo solo si Área 3 lo pide | |
-| Entrega | README + `docker compose` o un script `make dev` | |
-
-No instalar stack hasta conocer el área y el insumo.
+| Backend | FastAPI + pandas | [0003](adr/0003-backend-fastapi-frontend-react.md) |
+| Frontend | React + Vite + Plotly | [0003](adr/0003-backend-fastapi-frontend-react.md) |
+| LLM | `gpt-4o` (fallback `gpt-4o-mini` / MockLLM) | [0004](adr/0004-modelo-llm-gpt-4o.md) |
+| Dashboards generados | UCP v1.0 (UI Composition Protocol) | [0005](adr/0005-ucp-ui-composition-protocol.md) |
+| RAG | Embeddings OpenAI o TF-IDF | [0006](adr/0006-rag-hibrido.md) |
+| Modelo preentrenado | HTTP remoto + fallback local | [0007](adr/0007-modelo-preentrenado-http.md) |
+| Detección | Reglas dinámicas (umbrales calibrados por percentil, generan evidencia) + el mejor de 4 modelos entrenados y comparados (IsolationForest, LOF, regresión logística, Random Forest) | [0002](adr/0002-arquitectura-pipeline-agentico-crispdm.md), [0009](adr/0009-evaluacion-etiqueta-debil.md) |
+| Datos + pipeline | `pipeline/` (CRISP-DM) sobre RISA Data V1.0 real, componente propio consumido por el backend | [0008](adr/0008-pipeline-crispdm-datos-reales.md) |
 
 ---
 
@@ -239,10 +248,9 @@ Integración cada ~90 min. Nada de rama eterna: el `main` tiene que poder demost
 ## 15. Pendientes para decidir juntos
 
 - [x] Área de desafío → 1 Salud e inteligencia de datos (HealthSignal LATAM / RISA)
-- [ ] Nombre definitivo (working title: RISA Signal) y tagline final
+- [x] Nombre definitivo: RISA Signal
 - [x] Actor primario y decisión que apoyamos (sección 8)
 - [x] Reescribir RF/RNF/RN en lenguaje del reto
-- [ ] Primer `SPEC-001` del flujo feliz → borrador en [`spec/001-flujo-deteccion-senal-riesgo.md`](spec/001-flujo-deteccion-senal-riesgo.md), falta cerrar criterios de aceptación con datos reales de Data V1.0
-- [x] `ADR-0002` de arquitectura y recorte de alcance → [`adr/0002-arquitectura-pipeline-agentico-crispdm.md`](adr/0002-arquitectura-pipeline-agentico-crispdm.md)
-- [ ] `ADR-0003` de stack concreto (lenguaje, libs de series temporales/anomalías, framework de dashboard) — pendiente de ver el esquema real de Data V1.0
+- [x] Specs de flujo y de app: SPEC-001 … SPEC-007
+- [x] `ADR-0002` … `ADR-0007` (pipeline, stack, LLM, UCP, RAG, modelo remoto)
 - [ ] Qué persona cubre ingesta+calidad / detección+scoring / dashboard+narración

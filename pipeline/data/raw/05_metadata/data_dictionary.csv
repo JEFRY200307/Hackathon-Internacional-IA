@@ -1,0 +1,12 @@
+﻿file,field,type,key_role,description
+01_master/patients.csv,patient_id,string,PK,Canonical synthetic patient identifier
+01_master/encounters.csv,encounter_id,string,PK,Monitoring/attention episode
+01_master/encounters.csv,patient_id,string,FK,Patient reference
+02_clinical/laboratory_results.csv,sample_datetime,datetime,,Sample collection time
+02_clinical/laboratory_results.csv,result_datetime,datetime,,Time result becomes available
+03_monitoring/vital_signs.csv,timestamp,datetime,,Measurement time
+03_monitoring/vital_signs.csv,quality_flag,category,,Observable quality metadata; not a risk label
+03_monitoring/wearable_observations.csv,timestamp,datetime,,Measurement/device time
+03_monitoring/wearable_observations.csv,sync_datetime,datetime,,Availability/synchronization time
+04_context/patient_context.csv,start_datetime,datetime,,Context interval start
+04_context/connectivity_events.csv,connectivity_status,category,,Observed connectivity condition

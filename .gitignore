@@ -51,14 +51,28 @@ build/
 coverage/
 *.tsbuildinfo
 
-# Data and local artifacts (keep small samples tracked if needed)
-data/raw/
-data/processed/
-data/external/
+# Data y artefactos del pipeline (pipeline/data/, capas RAW/CLEAN/FEATURES/MODEL/RESULTS
+# del Documento Técnico Maestro V2, sección 12). raw/ y results/ SÍ se versionan
+# (dataset oficial inmutable + entregable oficial); clean/features/cache son
+# regenerables con `python -m pipeline.run_pipeline --rebuild` y no se versionan.
+pipeline/data/clean/
+pipeline/data/features/
+pipeline/data/cache/
+# 03_monitoring/ supera el límite de tamaño de archivo de GitHub (vital_signs.csv
+# 152 MB, wearable_observations.csv 85 MB) — se excluye del repo entero, la
+# carpeta queda vacía en git. Hace falta copiar estos 3 CSV a mano desde el ZIP
+# oficial de RISA Data V1.0 en pipeline/data/raw/03_monitoring/ antes de correr
+# el pipeline (ver pipeline/README.md).
+pipeline/data/raw/03_monitoring/*
+!pipeline/data/raw/03_monitoring/.gitkeep
 *.parquet
 *.h5
 *.pkl
 *.joblib
+# Excepción: el modelo ganador de pipeline/evaluacion.py sí se versiona en
+# pipeline/data/model/ — es un entregable pequeño (~KB) que demuestra que hay
+# un modelo entrenado y persistido, no solo un pipeline que lo recalcula en memoria.
+!pipeline/data/model/**
 models/*.bin
 models/*.onnx
 models/*.pt

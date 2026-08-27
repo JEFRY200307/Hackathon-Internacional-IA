@@ -1,0 +1,8 @@
+﻿source_system,source_name,source_type,update_frequency,interoperability_level,typical_latency,description
+EHR_CORE,RISA EHR Core,EHR,EVENT,HIGH,LOW,Encounter and context master data
+EHR_MED,Medication Module,EHR,EVENT,HIGH,LOW,Medication events
+LAB_SYS_A,Laboratory System A,LAB,EVENT,MEDIUM,30-180 min,Laboratory reporting
+LAB_SYS_B,Laboratory System B,LAB,EVENT,MEDIUM,60-360 min,Alternate laboratory reporting
+MONITOR_GATEWAY,Clinical Monitor Gateway,DEVICE_GATEWAY,5-60 min,HIGH,NEAR_REAL_TIME,Monitoring observations
+MONITOR_RETRANSMIT,Monitor Retransmission,DEVICE_GATEWAY,VARIABLE,MEDIUM,DELAYED,Retransmitted observations
+WEARABLE_GATEWAY,Wearable Gateway,WEARABLE_GATEWAY,5-15 min,MEDIUM,VARIABLE,Wearable/context streams
