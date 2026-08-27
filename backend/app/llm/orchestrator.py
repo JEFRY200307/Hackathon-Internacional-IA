@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from app.charts import turno_dashboard
+from app.charts import turno_risa_ui
 from app.config import settings
 from app.llm.prompts import SYSTEM_PROMPT
 from app.llm.tools import TOOLS, run_tool
-from app.state import AppState
+
+if TYPE_CHECKING:
+    from app.state import AppState
 
 _PID = re.compile(r"PAT-[\dA-Z]{2,8}", re.I)
 
@@ -21,8 +23,8 @@ def _patient_in(text: str, default: str | None = None) -> str | None:
 def _collect(result: Any, bag: dict[str, Any]) -> None:
     if not isinstance(result, dict):
         return
-    if "ucp" in result:
-        bag["ucp"] = result["ucp"]
+    if "risa_ui" in result:
+        bag["risa_ui"] = result["risa_ui"]
     if "chart" in result:
         bag["charts"].append(result["chart"])
     if isinstance(result, list) and result and isinstance(result[0], dict) and "source_id" in result[0]:
@@ -33,7 +35,14 @@ def _collect(result: Any, bag: dict[str, Any]) -> None:
 
 async def handle_chat(messages: list[dict[str, str]], app: AppState) -> dict[str, Any]:
     last = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
-    bag: dict[str, Any] = {"ucp": None, "charts": [], "citations": [], "tool_trace": [], "degraded": False, "model": None}
+    bag: dict[str, Any] = {
+        "risa_ui": None,
+        "charts": [],
+        "citations": [],
+        "tool_trace": [],
+        "degraded": False,
+        "model": None,
+    }
 
     if settings.openai_api_key:
         try:
@@ -104,14 +113,92 @@ async def _openai_loop(messages: list[dict[str, str]], app: AppState, bag: dict[
     return last_text or "Listo. Revisá el panel: usé las herramientas sobre el dataset."
 
 
+def _mock_dashboard_args(text: str, patient_id: str) -> dict[str, Any]:
+    levels = []
+    for keywords, value in (
+        (("crític", "critic"), "CRITICO"),
+        (("alt",), "ALTO"),
+        (("medi",), "MEDIO"),
+        (("baj",), "BAJO"),
+        (("descart",), "DESCARTADO"),
+    ):
+        if any(keyword in text for keyword in keywords):
+            levels.append(value)
+    patient_requested = bool(_PID.search(text))
+    if not levels and not patient_requested and not any(key in text for key in ("spo2", "laboratorio", "lab_", "resp")):
+        return {"use_turno_template": True}
+
+    widgets: list[dict[str, Any]] = []
+    for level in levels:
+        widgets.extend(
+            [
+                {
+                    "type": "kpi",
+                    "id": f"{level.lower()}-count",
+                    "title": f"Alertas {level}",
+                    "metric": "alert_count",
+                    "filters": {"level": level},
+                },
+                {
+                    "type": "alert_list",
+                    "id": f"{level.lower()}-alerts",
+                    "title": f"Cola {level}",
+                    "level": level,
+                    "limit": 10,
+                    "on_select": {"action": "select_alert"},
+                },
+            ]
+        )
+    variables = ["heart_rate"]
+    if "spo2" in text or "satur" in text:
+        variables.append("spo2")
+    if "resp" in text:
+        variables.append("resp_rate")
+    if "laboratorio" in text or "lab_" in text:
+        variables = ["LAB_A", "LAB_B", "LAB_C", "LAB_D"]
+    if patient_requested or len(variables) > 1 or variables[0].startswith("LAB_"):
+        widgets.extend(
+            [
+                {
+                    "type": "chart",
+                    "id": "patient-series",
+                    "title": f"Series de {patient_id}",
+                    "chart": {"patient_id": patient_id, "variables": variables[:4], "kind": "line"},
+                },
+                {
+                    "type": "evidence",
+                    "id": "patient-evidence",
+                    "title": f"Evidencia de {patient_id}",
+                    "patient_id": patient_id,
+                },
+            ]
+        )
+    if not widgets:
+        return {"use_turno_template": True}
+    widgets.append(
+        {
+            "type": "markdown",
+            "id": "scope-note",
+            "title": "Alcance",
+            "text": "Dashboard hidratado por el backend con RISA Data V1.0; apoyo a revisión, no diagnóstico.",
+        }
+    )
+    return {
+        "title": "Dashboard solicitado — RISA Signal",
+        "subtitle": "Composición dinámica en modo MockLLM",
+        "widgets": widgets[:6],
+    }
+
+
 async def _mock_loop(text: str, app: AppState, bag: dict[str, Any]) -> str:
     low = (text or "").lower()
     default_pid = app.dataset.patients["patient_id"].iloc[0] if len(app.dataset.patients) else "PAT-0001"
     pid = _patient_in(text, default_pid)
     planned: list[tuple[str, dict]] = []
 
-    if any(k in low for k in ("dashboard", "tablero", "ucp", "panel")):
-        planned.append(("emit_ucp", {"use_turno_template": True}))
+    if any(k in low for k in ("dashboard", "tablero", "risa ui", "panel")):
+        planned.append(("get_dashboard_context", {}))
+        planned.append(("emit_risa_ui", _mock_dashboard_args(low, pid)))
     if any(k in low for k in ("gráf", "graf", "chart", "plot", "serie", "fc", "spo2", "lab_a", "lab_b", "lab_c", "lab_d", "laboratorio")):
         variables = ["heart_rate"]
         if "spo2" in low or "sat" in low:
@@ -136,8 +223,8 @@ async def _mock_loop(text: str, app: AppState, bag: dict[str, Any]) -> str:
         bag["tool_trace"].append({"tool": name, "ok": True, "args": args})
         snippets.append(f"- `{name}`")
 
-    if bag["ucp"] is None and any(k in low for k in ("dashboard", "tablero")):
-        bag["ucp"] = turno_dashboard(app)
+    if bag["risa_ui"] is None and any(k in low for k in ("dashboard", "tablero")):
+        bag["risa_ui"] = turno_risa_ui(app)
 
     top = [a for a in app.alerts if a["level"] in {"CRITICO", "ALTO"}]
     discarded = [a for a in app.alerts if a["level"] == "DESCARTADO"]
@@ -151,6 +238,6 @@ async def _mock_loop(text: str, app: AppState, bag: dict[str, Any]) -> str:
         "",
         "Herramientas usadas:\n" + "\n".join(snippets),
         "",
-        f"Pedí un *dashboard del turno*, un *gráfico de FC de {pid}* o *por qué {pid} está en {top[0]['level'] if top else 'BAJO'}* para ver UCP, Plotly y citas RAG.",
+        f"Pedí un *dashboard del turno*, un *gráfico de FC de {pid}* o *por qué {pid} está en {top[0]['level'] if top else 'BAJO'}* para ver RISA UI, Plotly y citas RAG.",
     ]
     return "\n".join(lines)

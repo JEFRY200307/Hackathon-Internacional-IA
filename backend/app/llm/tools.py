@@ -1,13 +1,29 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.adapters.pretrained import predict_risk
-from app.charts import build_chart, turno_dashboard
-from app.state import AppState
-from app.ucp.protocol import validate_ucp
+from app.charts import build_chart, hydrate_risa_ui, turno_risa_ui
+from app.risa_ui.protocol import (
+    ALERT_LEVELS,
+    RISA_UI_METRICS,
+    RISA_UI_VARIABLES,
+    EmitRisaUiArgs,
+    emit_risa_ui_schema,
+)
+
+if TYPE_CHECKING:
+    from app.state import AppState
 
 TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_dashboard_context",
+            "description": "Describe los datos, métricas, variables y filtros permitidos antes de componer un dashboard.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -77,16 +93,12 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "emit_ucp",
-            "description": "Emite un dashboard UCP v1.0. Si widgets está vacío, se usa la plantilla del turno.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string"},
-                    "widgets": {"type": "array", "items": {"type": "object"}},
-                    "use_turno_template": {"type": "boolean"},
-                },
-            },
+            "name": "emit_risa_ui",
+            "description": (
+                "Emite un dashboard RISA UI Protocol v1.0. La interfaz es declarativa: "
+                "el backend calcula e hidrata todos los datos."
+            ),
+            "parameters": emit_risa_ui_schema(),
         },
     },
     {
@@ -110,6 +122,29 @@ TOOLS = [
 
 
 async def run_tool(name: str, args: dict[str, Any], app: AppState) -> Any:
+    if name == "get_dashboard_context":
+        counts = {level: sum(1 for alert in app.alerts if alert["level"] == level) for level in ALERT_LEVELS}
+        return {
+            "protocol": "risa-ui",
+            "version": "1.0",
+            "dataset": app.dataset.origin,
+            "patient_count": int(len(app.dataset.patients)),
+            "allowed_widgets": ["kpi", "chart", "table", "alert_list", "evidence", "markdown"],
+            "allowed_metrics": sorted(RISA_UI_METRICS),
+            "allowed_variables": sorted(RISA_UI_VARIABLES),
+            "allowed_levels": list(ALERT_LEVELS),
+            "counts": counts,
+            "top_alerts": [
+                {
+                    "id": alert["id"],
+                    "patient_id": alert["patient_id"],
+                    "level": alert["level"],
+                    "pattern": alert["pattern"],
+                    "score": alert["score"],
+                }
+                for alert in app.alerts[:10]
+            ],
+        }
     if name == "list_alerts":
         level = args.get("level")
         items = app.alerts if not level else [a for a in app.alerts if a["level"] == level]
@@ -155,13 +190,16 @@ async def run_tool(name: str, args: dict[str, Any], app: AppState) -> Any:
         alert = next((a for a in app.alerts if a["patient_id"] == pid), None)
         features = alert["features"] if alert else {}
         return await predict_risk(pid, features)
-    if name == "emit_ucp":
-        if args.get("use_turno_template") or not args.get("widgets"):
-            return {"ucp": turno_dashboard(app)}
-        doc = validate_ucp({"title": args.get("title"), "widgets": args.get("widgets")})
-        from app.charts import hydrate_ucp
-
-        return {"ucp": hydrate_ucp(doc, app)}
+    if name == "emit_risa_ui":
+        parsed = EmitRisaUiArgs.model_validate(args)
+        if parsed.use_turno_template or not parsed.widgets:
+            return {"risa_ui": turno_risa_ui(app)}
+        doc = {
+            "title": parsed.title,
+            "subtitle": parsed.subtitle,
+            "widgets": [widget.model_dump(exclude_none=True) for widget in parsed.widgets],
+        }
+        return {"risa_ui": hydrate_risa_ui(doc, app)}
     if name == "emit_chart":
         return {
             "chart": build_chart(

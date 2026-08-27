@@ -47,7 +47,7 @@ El resultado no es un dashboard más de signos vitales: es una cola de casos ord
 | 2 | Detectar patrones combinando fuentes y evolución temporal, no umbrales de una sola variable | `pipeline/modelado.py` (reglas calibradas por percentil) + 6 candidatos de Anomaly Model + 4 de Pattern Model, comparados en `pipeline/deteccion_anomalias.py`/`modelado_patrones.py`, ver [Resultados](#resultados) |
 | 3 | Priorizar y controlar falsas alertas sin ocultar lo descartado | 413/1000 pacientes descartados **con motivo visible** (`CONTEXTUAL`, `TRANSIENT`, `LOW_QUALITY`) |
 | 4 | Explicar y trazar cada señal hasta el registro fuente | Tarjeta de evidencia (UI) + `pipeline/data/results/evidence.csv` con `source_file`/`record_id` por señal |
-| 5 | Permitir exploración dinámica durante la evaluación | Chat con tools sobre el dataset real, dashboards UCP, gráficos Plotly bajo demanda |
+| 5 | Permitir exploración dinámica durante la evaluación | Chat con tools sobre el dataset real, dashboards RISA UI, gráficos Plotly bajo demanda |
 | 6 | No sustituir el criterio clínico | Ninguna salida se presenta como diagnóstico; siempre score + prioridad + evidencia (RN-03) |
 
 ## Arquitectura
@@ -71,7 +71,7 @@ flowchart LR
 
     subgraph API["backend/ — FastAPI"]
         direction TB
-        B1["Dataset facade"] --> B2["Alertas · Charts · UCP"]
+        B1["Dataset facade"] --> B2["Alertas · Charts · RISA UI"]
         B2 --> B3["Chat (gpt-4o / MockLLM) + tools"]
         B3 --> B4["RAG (evidencia + reglas)"]
         M["Modelo preentrenado externo\n(HTTP + fallback local)"] -.-> B3
@@ -80,7 +80,7 @@ flowchart LR
     subgraph UI["frontend/ — React + Vite"]
         direction TB
         U1["Cola de alertas"] --> U2["Chat"]
-        U2 --> U3["Canvas: UCP + Plotly + evidencia"]
+        U2 --> U3["Canvas: RISA UI + Plotly + evidencia"]
     end
 
     DATA --> PIPE
@@ -91,8 +91,8 @@ flowchart LR
 ```
 
 - **`pipeline/`** es el único componente que toca los CSV crudos (`pipeline/data/raw/`, inmutable). Produce un `PipelineResult` con procedencia y calidad ya resueltas, y el entregable oficial `pipeline/data/results/signals.csv` + `evidence.csv`.
-- **`backend/`** no procesa datos: sirve lo que el pipeline ya integró, vía REST, y orquesta el chat/RAG/UCP/modelo externo sobre eso.
-- **`frontend/`** consume solo HTTP — cola de alertas, chat conversacional, dashboards compuestos (UCP) y gráficos interactivos (Plotly).
+- **`backend/`** no procesa datos: sirve lo que el pipeline ya integró, vía REST, y orquesta el chat/RAG/RISA UI/modelo externo sobre eso.
+- **`frontend/`** consume solo HTTP — cola de alertas, chat conversacional, dashboards compuestos (RISA UI Protocol) y gráficos interactivos (Plotly).
 
 Ver también el boceto de visión completa (multi-institución, agentes de datos/modelado) en [`docs/arquitectura.md`](docs/arquitectura.md) y el porqué del recorte en [`ADR-0002`](docs/adr/0002-arquitectura-pipeline-agentico-crispdm.md).
 
@@ -117,7 +117,7 @@ Detalle completo en [`pipeline/README.md`](pipeline/README.md), [`SPEC-008`](doc
 | Backend | FastAPI | [`ADR-0003`](docs/adr/0003-backend-fastapi-frontend-react.md) |
 | Frontend | React + Vite + Plotly.js | [`ADR-0003`](docs/adr/0003-backend-fastapi-frontend-react.md) |
 | LLM del chat | `gpt-4o` (o `MockLLM` sin API key) | [`ADR-0004`](docs/adr/0004-modelo-llm-gpt-4o.md) |
-| Dashboards generados | UCP v1.0 (catálogo cerrado de widgets) | [`ADR-0005`](docs/adr/0005-ucp-ui-composition-protocol.md) |
+| Dashboards generados | RISA UI Protocol v1.0 (catálogo cerrado) | [`ADR-0005`](docs/adr/0005-risa-ui-protocol.md) |
 | RAG de evidencia | TF-IDF u OpenAI embeddings | [`ADR-0006`](docs/adr/0006-rag-hibrido.md) |
 | Modelo preentrenado | HTTP remoto + fallback local | [`ADR-0007`](docs/adr/0007-modelo-preentrenado-http.md) |
 | Detección | Reglas calibradas por percentil (evidencia) + mejor Anomaly Model + mejor Pattern Model, cada familia comparada por separado | [`ADR-0002`](docs/adr/0002-arquitectura-pipeline-agentico-crispdm.md), [`ADR-0009`](docs/adr/0009-evaluacion-etiqueta-debil.md) |
@@ -138,7 +138,7 @@ copy .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-Sin `OPENAI_API_KEY` el chat usa **MockLLM** + las mismas tools (dataset, alertas, UCP, gráficos, RAG) sobre los datos reales. Con key, el modelo es **`gpt-4o`**. `PRETRAINED_MODEL_URL` conecta un modelo preentrenado externo por HTTP; si no está, hay fallback local (`local-fallback-0.1`).
+Sin `OPENAI_API_KEY` el chat usa **MockLLM** + las mismas tools (dataset, alertas, RISA UI, gráficos, RAG) sobre los datos reales. Con key, el modelo es **`gpt-4o`**. `PRETRAINED_MODEL_URL` conecta un modelo preentrenado externo por HTTP; si no está, hay fallback local (`local-fallback-0.1`).
 
 ### 2. Pipeline por separado (opcional — regenerar el entregable oficial)
 
@@ -161,7 +161,7 @@ Abrir `http://localhost:5173` — el API por defecto es `http://localhost:8000`.
 
 1. **Cola de alertas** — filtrar por `CRITICO`/`ALTO`: cada caso muestra patrón (`PROGRESSIVE_MULTISOURCE`, `EARLY_SIGNAL`...) y score.
 2. **Chat** → «¿A quién debo revisar primero y por qué?» — el LLM llama `list_alerts` y cita evidencia RAG, nunca inventa un valor.
-3. «Armá un dashboard del turno» → canvas UCP con KPIs, cola y evidencia del caso top, hidratado con datos reales.
+3. «Armá un dashboard del turno» → canvas RISA UI con KPIs, cola y evidencia del caso top, hidratado con datos reales.
 4. Abrir una alerta `DESCARTADO` → ver por qué (contexto de actividad, outlier transitorio o calidad de señal baja) — lo descartado no se oculta (RN-02).
 5. «¿Qué dice el modelo preentrenado del caso más prioritario?» → respuesta remota si `PRETRAINED_MODEL_URL` está configurado, o `local_fallback` etiquetado como tal.
 

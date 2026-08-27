@@ -192,18 +192,29 @@ button, input { font: inherit; }
 .error { color: var(--lvl-critico); padding: 0 16px 12px; }
 
 .canvas { overflow: auto; padding: 16px; display: grid; gap: 16px; align-content: start; background: var(--panel); }
-.detail, .ucp, .ucp-block, .evidence {
+.detail, .risa-ui, .risa-ui-block, .evidence {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px;
   box-shadow: 0 1px 2px rgba(11, 11, 11, 0.03);
 }
-.ucp-head h2, .detail h2 { margin: 4px 0; font-size: 1.05rem; color: var(--ink); }
+.risa-ui-head h2, .detail h2 { margin: 4px 0; font-size: 1.05rem; color: var(--ink); }
 .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
 .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
 .kpi-label, .kpi-hint { margin: 0; color: var(--muted); font-size: 0.75rem; }
 .kpi-value { margin: 4px 0; font-size: 1.4rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kpi-detail, .risa-ui-provenance { margin: 4px 0 0; color: var(--muted); font-size: 0.7rem; }
+.risa-ui-alerts button {
+  width: 100%;
+  padding: 5px 0;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+}
+.risa-ui-alerts button:not(:disabled), .interactive-row { cursor: pointer; }
+.risa-ui-alerts button:not(:disabled):hover, .interactive-row:hover { background: var(--surface); }
 .plain { padding-left: 16px; }
 .hitl { display: flex; gap: 8px; margin-top: 10px; }
 .plot-wrap { margin: 0; }

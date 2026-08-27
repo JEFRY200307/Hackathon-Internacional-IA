@@ -6,7 +6,7 @@ Una spec = un flujo o capacidad que el prototipo debe poder demostrar. Instancia
 | --- | --- |
 | [SPEC-001](001-flujo-deteccion-senal-riesgo.md) | Detección y priorización de señales |
 | [SPEC-002](002-chat-llm.md) | Chat con el LLM sobre el dataset |
-| [SPEC-003](003-dashboard-ucp.md) | Dashboards compuestos con UCP |
+| [SPEC-003](003-dashboard-risa-ui.md) | Dashboards compuestos con RISA UI Protocol |
 | [SPEC-004](004-graficos-interactivos.md) | Gráficos interactivos Plotly |
 | [SPEC-005](005-modelo-preentrenado.md) | Modelo preentrenado HTTP (otro proyecto) |
 | [SPEC-006](006-sistema-alertas.md) | Cola de alertas por nivel de riesgo |

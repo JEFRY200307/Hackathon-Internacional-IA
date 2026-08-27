@@ -46,7 +46,7 @@ Lo que **no** vamos a construir aunque sea "bonito". Sirve para defender recorte
 
 - Selección automática de modelo por un agente autónomo entre muchas alternativas — en su lugar, comparar 1–2 enfoques (regla dinámica vs. un modelo simple) y justificar cuál queda.
 - Cruce/federación de datos entre instituciones RISA y modelos adaptados por institución — se documenta como visión de escalamiento (pitch), no se construye.
-- Agente conversacional de propósito general fuera de RISA (el chat SÍ está en el MVP, pero solo anclado a dataset, alertas, UCP, gráficos, modelo remoto y RAG; ver RF-10…RF-16).
+- Agente conversacional de propósito general fuera de RISA (el chat SÍ está en el MVP, pero solo anclado a dataset, alertas, RISA UI, gráficos, modelo remoto y RAG; ver RF-10…RF-16).
 - Emisión de diagnóstico, prescripción o decisión clínica autónoma — el reto lo prohíbe explícitamente; la salida siempre es señal + prioridad + evidencia.
 - Reentrenamiento automático o loop de mejora continua de modelos en producción.
 - Dashboards personalizados por institución o multi-tenant real; un dashboard único que filtra por paciente/institución alcanza.
@@ -57,7 +57,7 @@ Lo que **no** vamos a construir aunque sea "bonito". Sirve para defender recorte
 
 ### Dentro
 
-- Flujo feliz: ingesta de 2–3 fuentes heterogéneas de RISA → alineación → detección → ranking de alertas → chat que consulta el dataset, compone dashboards UCP, gráficos interactivos y citas RAG.
+- Flujo feliz: ingesta de 2–3 fuentes heterogéneas de RISA → alineación → detección → ranking de alertas → chat que consulta el dataset, compone dashboards RISA UI, gráficos interactivos y citas RAG.
 - 1 insight útil: ranking de pacientes/casos por prioridad de revisión, con motivo visible.
 - Integración HTTP con un modelo preentrenado de otro proyecto, con fallback local.
 - Fallback: si el LLM o el modelo remoto fallan, tools + reglas + MockLLM siguen demostrando el flujo.
@@ -107,7 +107,7 @@ Comportamiento observable. Cada RF debe poder señalarse en la demo. Estados: `p
 | RF-09 | El usuario marca una alerta como revisada/confirmada/descartada; la acción queda registrada como parte de la trazabilidad (human-in-the-loop) | Usuario | P1 | SPEC-006 | propuesto |
 | RF-10 | El usuario conversa en lenguaje natural con un LLM sobre pacientes, alertas y el dataset de RISA | Usuario | P0 | SPEC-002 | propuesto |
 | RF-11 | El LLM consulta el dataset mediante herramientas (no inventa series); el usuario puede ver la traza de tools | Sistema | P0 | SPEC-002 | propuesto |
-| RF-12 | El usuario pide un dashboard y el sistema lo compone con UCP v1.0 (catálogo cerrado de widgets hidratados) | Usuario | P0 | SPEC-003 | propuesto |
+| RF-12 | El usuario pide un dashboard y el sistema lo compone con RISA UI Protocol v1.0 (catálogo cerrado hidratado) | Usuario | P0 | SPEC-003 | propuesto |
 | RF-13 | El usuario pide un gráfico y ve una visualización interactiva (Plotly) con datos reales y procedencia | Usuario | P0 | SPEC-004 | propuesto |
 | RF-14 | El sistema consulta un modelo preentrenado expuesto por otro proyecto vía HTTP; si no responde, usa fallback local etiquetado | Sistema | P0 | SPEC-005 | propuesto |
 | RF-15 | El usuario ve y filtra la cola de alertas por nivel de riesgo (CRITICO…DESCARTADO) con evidencia | Usuario | P0 | SPEC-006 | propuesto |
@@ -206,7 +206,7 @@ Instanciar riesgos nuevos con [`archetypes/riesgo.md`](archetypes/riesgo.md) y v
 | Backend | FastAPI + pandas | [0003](adr/0003-backend-fastapi-frontend-react.md) |
 | Frontend | React + Vite + Plotly | [0003](adr/0003-backend-fastapi-frontend-react.md) |
 | LLM | `gpt-4o` (fallback `gpt-4o-mini` / MockLLM) | [0004](adr/0004-modelo-llm-gpt-4o.md) |
-| Dashboards generados | UCP v1.0 (UI Composition Protocol) | [0005](adr/0005-ucp-ui-composition-protocol.md) |
+| Dashboards generados | RISA UI Protocol v1.0 | [0005](adr/0005-risa-ui-protocol.md) |
 | RAG | Embeddings OpenAI o TF-IDF | [0006](adr/0006-rag-hibrido.md) |
 | Modelo preentrenado | HTTP remoto + fallback local | [0007](adr/0007-modelo-preentrenado-http.md) |
 | Detección | Reglas dinámicas (umbrales calibrados por percentil, generan evidencia) + el mejor de 4 modelos entrenados y comparados (IsolationForest, LOF, regresión logística, Random Forest) | [0002](adr/0002-arquitectura-pipeline-agentico-crispdm.md), [0009](adr/0009-evaluacion-etiqueta-debil.md) |
@@ -252,5 +252,5 @@ Integración cada ~90 min. Nada de rama eterna: el `main` tiene que poder demost
 - [x] Actor primario y decisión que apoyamos (sección 8)
 - [x] Reescribir RF/RNF/RN en lenguaje del reto
 - [x] Specs de flujo y de app: SPEC-001 … SPEC-007
-- [x] `ADR-0002` … `ADR-0007` (pipeline, stack, LLM, UCP, RAG, modelo remoto)
+- [x] `ADR-0002` … `ADR-0007` (pipeline, stack, LLM, RISA UI, RAG, modelo remoto)
 - [ ] Qué persona cubre ingesta+calidad / detección+scoring / dashboard+narración

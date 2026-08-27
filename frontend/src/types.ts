@@ -39,25 +39,63 @@ export type AlertItem = {
   local_model_score?: number;
 };
 
-export type UcpWidget = {
-  id?: string;
-  type: string;
-  title?: string;
-  value?: string;
-  hint?: string;
-  text?: string;
-  items?: AlertItem[];
-  alert?: AlertItem;
-  plotly?: PlotlySpec;
-  rows?: Record<string, unknown>[];
+export type AlertSummary = Pick<AlertItem, "id" | "patient_id" | "level" | "pattern" | "title" | "score">;
+
+export type RisaUiProvenance = {
+  source: string;
+  count?: number;
+  metric?: string;
 };
 
-export type UcpDocument = {
-  protocol: string;
-  version: string;
+type RisaUiBaseWidget = {
+  id: string;
+  title?: string;
+  empty_message?: string;
+  provenance?: RisaUiProvenance;
+};
+
+export type RisaUiWidget =
+  | (RisaUiBaseWidget & {
+      type: "kpi";
+      metric: string;
+      value: string;
+      hint?: string;
+      detail?: string;
+    })
+  | (RisaUiBaseWidget & {
+      type: "chart";
+      chart: {
+        patient_id?: string;
+        variables: string[];
+        kind: "line" | "bar" | "scatter";
+      };
+      plotly?: PlotlySpec;
+    })
+  | (RisaUiBaseWidget & {
+      type: "table";
+      rows?: Record<string, unknown>[];
+      on_select?: { action: "select_alert" };
+    })
+  | (RisaUiBaseWidget & {
+      type: "alert_list";
+      items?: AlertSummary[];
+      on_select?: { action: "select_alert" };
+    })
+  | (RisaUiBaseWidget & {
+      type: "evidence";
+      alert?: AlertItem;
+    })
+  | (RisaUiBaseWidget & {
+      type: "markdown";
+      text: string;
+    });
+
+export type RisaUiDocument = {
+  protocol: "risa-ui";
+  version: "1.0";
   title: string;
   subtitle?: string;
-  widgets: UcpWidget[];
+  widgets: RisaUiWidget[];
 };
 
 export type PlotlySpec = {
@@ -75,7 +113,7 @@ export type AssistantMessage = {
   content: string;
   citations?: Citation[];
   tool_trace?: ToolTrace[];
-  ucp?: UcpDocument | null;
+  risa_ui?: RisaUiDocument | null;
   charts?: PlotlySpec[];
   degraded?: boolean;
   model?: string | null;

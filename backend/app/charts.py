@@ -1,24 +1,28 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from app.data.loader import Dataset
-from app.state import AppState
-from app.ucp.protocol import template_turno, validate_ucp
+from app.risa_ui.protocol import template_turno, validate_risa_ui
+
+if TYPE_CHECKING:
+    from app.data.loader import Dataset
+    from app.state import AppState
 
 VITAL_KEYS = {"heart_rate", "spo2", "resp_rate", "sbp", "dbp", "temp"}
 LAB_KEYS = {"LAB_A", "LAB_B", "LAB_C", "LAB_D"}
 
 
-def hydrate_ucp(doc: dict[str, Any], app: AppState) -> dict[str, Any]:
-    clean = validate_ucp(doc)
+def hydrate_risa_ui(doc: dict[str, Any], app: AppState) -> dict[str, Any]:
+    clean = validate_risa_ui(doc)
     hydrated = []
     for widget in clean["widgets"]:
         wtype = widget["type"]
         if wtype == "alert_list":
             limit = int(widget.get("limit") or 8)
+            level = widget.get("level")
+            alerts = app.alerts if not level else [a for a in app.alerts if a["level"] == level]
             widget = {
                 **widget,
                 "items": [
@@ -30,16 +34,30 @@ def hydrate_ucp(doc: dict[str, Any], app: AppState) -> dict[str, Any]:
                         "title": a["title"],
                         "score": a["score"],
                     }
-                    for a in app.alerts[:limit]
+                    for a in alerts[:limit]
                 ],
+                "empty_message": "No hay alertas para este filtro." if not alerts else None,
+                "provenance": {"source": app.dataset.origin, "count": len(alerts)},
             }
         elif wtype == "evidence":
             alert = app.alert_by_id(widget.get("alert_id") or "")
-            if not alert and app.alerts:
-                alert = app.alerts[0]
-            widget = {**widget, "alert": alert}
-        elif wtype == "kpi" and not widget.get("value"):
-            widget = {**widget, "value": "—"}
+            if not alert and widget.get("patient_id"):
+                patient_alerts = app.alerts_for_patient(widget["patient_id"])
+                alert = patient_alerts[0] if patient_alerts else None
+            widget = {
+                **widget,
+                "alert": alert,
+                "empty_message": "No se encontró evidencia para la referencia solicitada." if not alert else None,
+                "provenance": {"source": app.dataset.origin},
+            }
+        elif wtype == "kpi":
+            value, detail = _kpi_value(app, widget)
+            widget = {
+                **widget,
+                "value": value,
+                "detail": detail,
+                "provenance": {"source": app.dataset.origin, "metric": widget["metric"]},
+            }
         elif wtype == "chart":
             spec = widget.get("chart") or {}
             widget = {
@@ -53,23 +71,69 @@ def hydrate_ucp(doc: dict[str, Any], app: AppState) -> dict[str, Any]:
                 ),
             }
         elif wtype == "table":
-            widget = {**widget, "rows": _table_rows(app, widget)}
-        hydrated.append(widget)
+            rows = _table_rows(app, widget)
+            widget = {
+                **widget,
+                "rows": rows,
+                "empty_message": "No hay filas para los filtros solicitados." if not rows else None,
+                "provenance": {"source": app.dataset.origin, "count": len(rows)},
+            }
+        hydrated.append({key: value for key, value in widget.items() if value is not None})
     clean["widgets"] = hydrated
     return clean
 
 
-def turno_dashboard(app: AppState) -> dict[str, Any]:
-    return hydrate_ucp(template_turno(app.alerts, app.dataset.origin), app)
+def turno_risa_ui(app: AppState) -> dict[str, Any]:
+    return hydrate_risa_ui(template_turno(app.alerts, app.dataset.origin), app)
 
 
 def _table_rows(app: AppState, widget: dict) -> list[dict]:
-    if widget.get("of") == "patients":
-        return app.dataset.patients.to_dict(orient="records")
-    return [
-        {"id": a["id"], "patient_id": a["patient_id"], "level": a["level"], "pattern": a["pattern"], "score": a["score"]}
-        for a in app.alerts
-    ]
+    source = widget.get("source") or "alerts"
+    limit = int(widget.get("limit") or 20)
+    columns = widget.get("columns")
+    if source == "patients":
+        rows = app.dataset.patients.to_dict(orient="records")
+    else:
+        level = (widget.get("filters") or {}).get("level")
+        alerts = app.alerts if not level else [a for a in app.alerts if a["level"] == level]
+        rows = [
+            {
+                "id": a["id"],
+                "patient_id": a["patient_id"],
+                "level": a["level"],
+                "pattern": a["pattern"],
+                "score": a["score"],
+                "title": a.get("title"),
+                "review_status": a.get("review_status"),
+            }
+            for a in alerts
+        ]
+    rows = rows[:limit]
+    if columns:
+        rows = [{column: row.get(column) for column in columns if column in row} for row in rows]
+    return rows
+
+
+def _kpi_value(app: AppState, widget: dict[str, Any]) -> tuple[str, str]:
+    metric = widget["metric"]
+    level = (widget.get("filters") or {}).get("level")
+    alerts = app.alerts if not level else [a for a in app.alerts if a["level"] == level]
+    if metric == "alert_count":
+        detail = f"Alertas nivel {level}" if level else "Todas las alertas"
+        return str(len(alerts)), detail
+    if metric == "patient_count":
+        return str(len(app.dataset.patients)), "Pacientes en el dataset"
+    if metric == "discarded_count":
+        return str(sum(1 for a in app.alerts if a["level"] == "DESCARTADO")), "Descartados con motivo visible"
+    if metric == "average_risk_score":
+        if not alerts:
+            return "—", "Sin alertas para calcular el promedio"
+        average = sum(float(a.get("score") or 0) for a in alerts) / len(alerts)
+        return f"{average:.3f}", f"Promedio de {len(alerts)} alertas"
+    if metric == "top_priority_patient":
+        top = alerts[0] if alerts else None
+        return (str(top["patient_id"]), f"{top['level']} · {top['pattern']}") if top else ("—", "Sin alertas")
+    return "—", "Métrica no disponible"
 
 
 def build_chart(

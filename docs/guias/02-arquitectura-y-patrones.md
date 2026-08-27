@@ -26,9 +26,9 @@ pipeline/  →  backend/  →  frontend/
 
 `backend/app/adapters/pretrained.py` aísla el único punto que sabe que existe un servicio HTTP externo. Si no responde (o no está configurado), `local_predict()` calcula un score de emergencia con las mismas `features` del `AlertDraft` — el resto del sistema (`llm/tools.py`, `main.py`) llama siempre a `predict_risk()` sin saber si la respuesta vino de la red o del fallback (`ADR-0007`).
 
-## 6. Protocolo de UI declarativo (UCP) en vez de vistas ad hoc
+## 6. RISA UI Protocol en vez de vistas ad hoc
 
-`backend/app/ucp/protocol.py` define un catálogo cerrado de tipos de widget (`kpi`, `chart`, `table`, `alert_list`, `evidence`, `markdown`). El backend arma el documento (`template_turno`) y lo "hidrata" con datos reales (`charts.hydrate_ucp`); el frontend (`UcpCanvas.tsx`) solo sabe renderizar esos 6 tipos, nunca ejecuta lógica de negocio. Es lo que le permite al LLM (`emit_ucp` tool) componer un dashboard nuevo con la misma superficie que el dashboard fijo del turno, sin abrir una puerta a HTML/JS arbitrario generado por el modelo (`ADR-0005`).
+`backend/app/risa_ui/protocol.py` define un catálogo cerrado de widgets (`kpi`, `chart`, `table`, `alert_list`, `evidence`, `markdown`). El agente declara métricas, fuentes y filtros; el backend valida e hidrata el documento mediante `charts.hydrate_risa_ui`, y `RisaUiCanvas.tsx` solo renderiza tipos conocidos. `get_dashboard_context` permite descubrir datos válidos y `emit_risa_ui` compone dashboards nuevos sin abrir una puerta a HTML/JS arbitrario (`ADR-0005`).
 
 ## 7. Separación evidencia vs. explicación (RN-06)
 

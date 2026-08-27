@@ -16,7 +16,7 @@ Fuente de verdad del prototipo de la Hackathon. Aquí viven la definición del p
 | --- | --- |
 | [`definicion.md`](definicion.md) | Documento vivo del proyecto (objetivos, RF, RNF, RN, restricciones) |
 | [`arquitectura.md`](arquitectura.md) | La idea explicada en prosa, diagramas de arquitectura (visión completa y MVP), stack propuesto y árbol de carpetas |
-| [`spec/`](spec/) | SPEC-001 … SPEC-009 (flujo, chat, UCP, gráficos, modelo, alertas, RAG, pipeline CRISP-DM, evaluación) |
+| [`spec/`](spec/) | SPEC-001 … SPEC-009 (flujo, chat, RISA UI, gráficos, modelo, alertas, RAG, pipeline CRISP-DM, evaluación) |
 | [`adr/`](adr/) | ADR-0001 … ADR-0009 |
 | [`guias/`](guias/) | Estándares de API, arquitectura y patrones, frontend, seguridad — el *cómo* se construye |
 | [`archetypes/`](archetypes/) | Plantillas reutilizables |

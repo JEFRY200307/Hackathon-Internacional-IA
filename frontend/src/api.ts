@@ -1,4 +1,4 @@
-import type { AlertItem, AssistantMessage, PlotlySpec, UcpDocument } from "./types";
+import type { AlertItem, AssistantMessage, PlotlySpec, RisaUiDocument } from "./types";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -27,7 +27,7 @@ export const api = {
         body: JSON.stringify({ status }),
       }),
     ),
-  turno: () => parse<UcpDocument>(fetch(`${API}/api/dashboards/turno`)),
+  turno: () => parse<RisaUiDocument>(fetch(`${API}/api/dashboards/turno`)),
   chat: (messages: { role: string; content: string }[]) =>
     parse<{ message: AssistantMessage }>(
       fetch(`${API}/api/chat`, {

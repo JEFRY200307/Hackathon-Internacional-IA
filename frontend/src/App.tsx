@@ -1,14 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import { UcpCanvas } from "./components/UcpCanvas";
 import { PlotPanel } from "./components/PlotPanel";
-import type { AlertItem, AssistantMessage, PlotlySpec, UcpDocument } from "./types";
+import { RisaUiCanvas } from "./components/RisaUiCanvas";
+import type { AlertItem, AssistantMessage, PlotlySpec, RisaUiDocument } from "./types";
 
 type Turn = { role: "user"; content: string } | (AssistantMessage & { role: "assistant" });
 
 const PROMPTS = [
   "¿A quién debo revisar primero y por qué?",
-  "Armá un dashboard del turno con UCP",
+  "Armá un dashboard del turno con RISA UI",
   "Graficá la FC y el marcador de laboratorio del paciente crítico",
   "¿Por qué PAT-0001 está descartado?",
   "¿Qué dice el modelo preentrenado del caso más prioritario?",
@@ -28,12 +28,12 @@ export default function App() {
     {
       role: "assistant",
       content:
-        "Soy RISA Signal. Puedo conversar sobre RISA Data V1.0, armar un dashboard UCP, graficar series y citar la evidencia RAG. No diagnostico.",
+        "Soy RISA Signal. Puedo conversar sobre RISA Data V1.0, armar dashboards con RISA UI Protocol, graficar series y citar la evidencia RAG. No diagnostico.",
     },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [ucp, setUcp] = useState<UcpDocument | null>(null);
+  const [risaUi, setRisaUi] = useState<RisaUiDocument | null>(null);
   const [charts, setCharts] = useState<PlotlySpec[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export default function App() {
       })
       .catch(() => setHealth("backend no disponible — ¿levantaste uvicorn en :8000?"));
     refreshAlerts().catch((e) => setError(String(e)));
-    api.turno().then(setUcp).catch(() => undefined);
+    api.turno().then(setRisaUi).catch(() => undefined);
   }, []);
 
   async function send(text: string) {
@@ -71,7 +71,7 @@ export default function App() {
       const history = nextTurns.map((t) => ({ role: t.role, content: t.content }));
       const { message } = await api.chat(history);
       setTurns([...nextTurns, { ...message, role: "assistant" }]);
-      if (message.ucp) setUcp(message.ucp);
+      if (message.risa_ui) setRisaUi(message.risa_ui);
       if (message.charts?.length) setCharts(message.charts);
     } catch (e) {
       setError(e instanceof Error ? e.message : "falló el chat");
@@ -123,6 +123,11 @@ export default function App() {
         });
       }
     }
+  }
+
+  function handleRisaUiSelect(alertId: string) {
+    const alert = alerts.find((item) => item.id === alertId);
+    if (alert) setSelected(alert);
   }
 
   return (
@@ -216,7 +221,7 @@ export default function App() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Preguntá al dataset, pedí un dashboard UCP o un gráfico…"
+            placeholder="Preguntá al dataset, pedí un dashboard RISA UI o un gráfico…"
             disabled={busy}
           />
           <button type="submit" disabled={busy}>
@@ -255,7 +260,7 @@ export default function App() {
             </div>
           </article>
         )}
-        {ucp && <UcpCanvas doc={ucp} />}
+        {risaUi && <RisaUiCanvas doc={risaUi} onSelectAlert={handleRisaUiSelect} />}
         {charts.map((c, i) => (
           <PlotPanel key={i} spec={c} />
         ))}

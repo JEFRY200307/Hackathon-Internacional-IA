@@ -50,6 +50,6 @@ Convenciones que sigue `backend/app/main.py` y que cualquier endpoint nuevo debe
 | GET | `/api/rag/search` | Búsqueda semántica sobre alertas/reglas/variables |
 | GET | `/api/model/status` / POST `/api/model/predict` | Estado y consulta del modelo preentrenado remoto (`ADR-0007`) |
 | POST | `/api/charts` | Serie interactiva (Plotly) de una o más variables de un paciente |
-| GET | `/api/dashboards/turno` | Dashboard UCP precompuesto del turno actual |
+| GET | `/api/dashboards/turno` | Dashboard RISA UI precompuesto del turno actual |
 | POST | `/api/chat` | Turno de conversación con el LLM (o MockLLM) + tools |
 | GET | `/api/pipeline/report` | Comprensión de datos + evaluación train/val/test del pipeline CRISP-DM |

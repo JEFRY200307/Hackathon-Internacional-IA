@@ -28,7 +28,7 @@ El hilo conductor de las tres partes es el mismo que pide el reto: **datos fragm
 | Agente de datos (limpieza/EDA) | 1 agente de perfilado que sugiere tratamiento de calidad; lo aprueba un curador humano | Selección y comparación automática de múltiples estrategias de limpieza |
 | Agente de modelado | Se comparan 1–2 enfoques a mano (regla dinámica vs. 1 modelo simple); no hay agente que "decide y entrena solo" | Agente que prueba varios modelos, los compara y elige, con reentrenamiento periódico |
 | Plataforma institucional | No se construye; el prototipo corre para una institución/dataset único | Modelo adaptado por institución, cruce de información entre instituciones, identificación/validación de pacientes entre redes |
-| Agente conversacional + dashboard | Chat anclado a tools (dataset, alertas, UCP, Plotly, RAG, modelo HTTP) + cola de alertas | Chat de propósito general y multi-institución |
+| Agente conversacional + dashboard | Chat anclado a tools (dataset, alertas, RISA UI, Plotly, RAG, modelo HTTP) + cola de alertas | Chat de propósito general y multi-institución |
 
 El detalle de por qué se corta cada pieza (y qué tan reversible es el corte) está en `ADR-0002`. Este documento se queda con la idea completa; el ADR se queda con la decisión de alcance.
 
@@ -91,12 +91,12 @@ flowchart LR
     F --> API["FastAPI"]
     M["Modelo preentrenado\n(otro proyecto HTTP)"] -.-> API
     LLM["gpt-4o + tools\n(MockLLM si no hay key)"] --> API
-    API --> UI["React: chat + UCP\n+ Plotly + cola"]
+    API --> UI["React: chat + RISA UI\n+ Plotly + cola"]
     UI --> I["Profesional de salud"]
     I -.->|"HITL review"| F
 ```
 
-El LLM no toca el scoring: llama tools. UCP y Plotly se hidratan en el servidor. Ver `ADR-0003`…`0007`.
+El LLM no toca el scoring: llama tools. RISA UI y Plotly se hidratan en el servidor. Ver `ADR-0003`…`0007`.
 
 ---
 
@@ -113,7 +113,7 @@ Pensado para 12 h, sin infraestructura que montar, y con cada pieza reemplazable
 | Detección de señales | Reglas dinámicas en `pandas` + `scikit-learn` (p. ej. `IsolationForest`) como segundo enfoque comparado a mano | Cubre el "no es un umbral estático" del reto sin apostar todo a que un solo modelo entrene bien en el tiempo disponible |
 | Agente de datos / agente de explicación | Llamada directa a una API de LLM (Claude o equivalente, intercambiable) con salida estructurada (`pydantic`/`instructor`) | Sin framework de agentes (LangChain, CrewAI, etc.): dos llamadas bien definidas con prompt + esquema de salida son más rápidas de depurar en 12 h que una orquestación genérica |
 | Orquestación del pipeline | Un único script/entrypoint (`scripts/run_pipeline.py`) | El pipeline es lineal (ver diagrama de la sección 4); no hace falta cola de mensajes ni workers para el prototipo |
-| Dashboard / chat | React + Vite + Plotly | Chat, canvas UCP y gráficos interactivos (`ADR-0003`) |
+| Dashboard / chat | React + Vite + Plotly | Chat, canvas RISA UI y gráficos interactivos (`ADR-0003`) |
 | Visualización | Plotly.js | Series temporales interactivas hidratadas por el backend |
 | Backend | FastAPI | Dataset, alertas, RAG, tools del LLM, adaptador HTTP del modelo |
 | Empaquetado y arranque | `requirements.txt` (o `pyproject.toml`) + `Makefile`/`run.sh` con un solo comando | Cumple RNF-05 ("alguien del equipo levanta el prototipo con un comando documentado") |
@@ -152,11 +152,11 @@ Hackathon-Internacional-IA/
 │   ├── despliegue.py                # fase 6 — orquesta todo, caché + export oficial
 │   ├── notebooks/                   # EDA y comparación de modelos, ejecutado con outputs reales
 │   └── run_pipeline.py              # CLI
-├── backend/                         # FastAPI: sirve el pipeline, alertas, RAG, LLM, UCP
+├── backend/                         # FastAPI: sirve el pipeline, alertas, RAG, LLM, RISA UI
 │   ├── app/
 │   ├── requirements.txt
 │   └── .env.example
-└── frontend/                        # React + Vite: chat, canvas UCP, Plotly, alertas
+└── frontend/                        # React + Vite: chat, canvas RISA UI, Plotly, alertas
     ├── src/
     └── package.json
 ```

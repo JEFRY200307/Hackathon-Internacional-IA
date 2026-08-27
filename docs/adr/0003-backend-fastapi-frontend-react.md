@@ -6,14 +6,14 @@
 
 ## Contexto
 
-`ADR-0002` recortó el agente conversacional y asumió un dashboard Streamlit fijo. El equipo decidió **subir a MVP** el chat que conversa con el dataset, compone dashboards (UCP) y gráficos interactivos. Streamlit no encaja: el LLM tiene que emitir UI estructurada a un canvas, no a un script lineal.
+`ADR-0002` recortó el agente conversacional y asumió un dashboard Streamlit fijo. El equipo decidió **subir a MVP** el chat que conversa con el dataset, compone dashboards (RISA UI Protocol) y gráficos interactivos. Streamlit no encaja: el LLM tiene que emitir UI estructurada a un canvas, no a un script lineal.
 
 ## Decisión
 
 Dos procesos:
 
 - **Backend:** FastAPI + pandas (ingesta, alertas, RAG, adaptador del modelo, loop de tools del LLM).
-- **Frontend:** React + Vite + Plotly (chat, canvas UCP, gráficos, cola de alertas).
+- **Frontend:** React + Vite + Plotly (chat, canvas RISA UI, gráficos, cola de alertas).
 
 El pipeline de detección sigue siendo un módulo Python importable, no un microservicio extra.
 
@@ -23,7 +23,7 @@ El pipeline de detección sigue siendo un módulo Python importable, no un micro
 | --- | --- |
 | Streamlit único | Elegida antes para 12 h con dashboard fijo. No renderiza un protocolo de widgets del LLM con control. |
 | Next.js fullstack | Un solo repo TS; el scoring y pandas viven mejor en Python. |
-| **FastAPI + React** | Elegida: Python para datos/ML, UI rica para UCP/Plotly, contratos HTTP explícitos. |
+| **FastAPI + React** | Elegida: Python para datos/ML, UI rica para RISA UI/Plotly, contratos HTTP explícitos. |
 
 ## Consecuencias
 
@@ -33,4 +33,4 @@ El pipeline de detección sigue siendo un módulo Python importable, no un micro
 
 ## Reversibilidad
 
-Media. El backend puede servir un HTML mínimo si el frontend se cae. Volver a Streamlit implicaría tirar el canvas UCP.
+Media. El backend puede servir un HTML mínimo si el frontend se cae. Volver a Streamlit implicaría tirar el canvas RISA UI.

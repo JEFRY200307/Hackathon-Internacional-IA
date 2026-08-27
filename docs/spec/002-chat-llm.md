@@ -18,7 +18,7 @@ Profesional de salud / analista. Dispara al enviar un mensaje en el panel de cha
 
 1. El usuario escribe una pregunta en español (p. ej. “¿quién debo revisar primero?”).
 2. El backend arma el historial de la sesión, inyecta el system prompt de RISA Signal y llama al LLM (ADR-0004) con herramientas.
-3. El LLM puede invocar herramientas de datos, alertas, RAG, modelo remoto, UCP o gráficos. El loop de tools no supera 4 vueltas.
+3. El LLM puede invocar herramientas de datos, alertas, RAG, modelo remoto, RISA UI o gráficos. El loop de tools no supera 4 vueltas.
 4. La respuesta visible mezcla texto (explicación) con bloques estructurados (citas, widgets). El texto nunca se presenta como diagnóstico.
 5. Si no hay API key o el proveedor cae, un proveedor *mock* responde con plantillas ancladas al dataset local (RNF-07).
 6. **Resultado observable:** el usuario ve una respuesta en < 15 s (o progreso visible), con al menos una cita o traza de herramienta cuando la pregunta es sobre pacientes/datos.
@@ -32,7 +32,7 @@ Profesional de salud / analista. Dispara al enviar un mensaje en el panel de cha
 ## Salidas
 
 - Mensaje del asistente: texto, `citations[]`, `tool_trace[]`.
-- Opcionalmente bloques UCP y/o charts (SPEC-003, SPEC-004).
+- Opcionalmente documentos RISA UI y/o charts (SPEC-003, SPEC-004).
 - Nada se persiste como historia clínica; la sesión vive en memoria del proceso (P1: localStorage en el cliente).
 
 ## No cubierto

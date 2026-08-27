@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.adapters.pretrained import model_status, predict_risk
 from app.alerts.service import counts_by_level
-from app.charts import build_chart, turno_dashboard
+from app.charts import build_chart, turno_risa_ui
 from app.config import settings
 from app.data.loader import variable_catalog
 from app.llm.orchestrator import handle_chat
@@ -137,7 +137,7 @@ def charts(body: ChartRequest) -> dict[str, Any]:
 
 @app.get("/api/dashboards/turno")
 def dashboard_turno() -> dict[str, Any]:
-    return turno_dashboard(state)
+    return turno_risa_ui(state)
 
 
 @app.post("/api/chat")
