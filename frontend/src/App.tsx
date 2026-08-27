@@ -70,7 +70,7 @@ export default function App() {
     try {
       const history = nextTurns.map((t) => ({ role: t.role, content: t.content }));
       const { message } = await api.chat(history);
-      setTurns([...nextTurns, message]);
+      setTurns([...nextTurns, { ...message, role: "assistant" }]);
       if (message.ucp) setUcp(message.ucp);
       if (message.charts?.length) setCharts(message.charts);
     } catch (e) {

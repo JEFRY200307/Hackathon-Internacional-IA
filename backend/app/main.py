@@ -144,4 +144,5 @@ def dashboard_turno() -> dict[str, Any]:
 async def chat(body: ChatRequest) -> dict[str, Any]:
     payload = [m.model_dump() for m in body.messages]
     result = await handle_chat(payload, state)
+    result["role"] = "assistant"
     return {"message": result}
