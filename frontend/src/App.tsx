@@ -92,6 +92,39 @@ export default function App() {
     setSelected((s) => (s ? { ...s, review_status: status } : s));
   }
 
+  function handleCiteClick(c: any) {
+    if (c.kind === "alert") {
+      const alertId = c.source_id.split(":")[1];
+      const alertItem = alerts.find((a) => a.id === alertId);
+      if (alertItem) {
+        setSelected(alertItem);
+        const variables = alertItem.evidence.map((e) => e.variable).filter((v) => v !== "laboratory");
+        if (variables.length > 0) {
+          api.chart(alertItem.patient_id, variables).then((chartSpec) => {
+            setCharts((prev) => [chartSpec, ...prev]);
+          });
+        }
+      }
+    } else if (c.kind === "patient" && c.patient_id) {
+      const alertItem = alerts.find((a) => a.patient_id === c.patient_id);
+      if (alertItem) {
+        setSelected(alertItem);
+        const variables = alertItem.evidence.map((e) => e.variable).filter((v) => v !== "laboratory");
+        api.chart(alertItem.patient_id, variables.length ? variables : ["heart_rate"]).then((chartSpec) => {
+          setCharts((prev) => [chartSpec, ...prev]);
+        });
+      }
+    } else if (c.kind === "variable") {
+      const varKey = c.source_id.split(":")[1];
+      const patientId = selected?.patient_id || c.patient_id;
+      if (patientId) {
+        api.chart(patientId, [varKey]).then((chartSpec) => {
+          setCharts((prev) => [chartSpec, ...prev]);
+        });
+      }
+    }
+  }
+
   return (
     <div className="shell">
       <header className="top">
@@ -137,7 +170,21 @@ export default function App() {
                 <div className="cites">
                   {t.citations.map((c) => (
                     <details key={c.source_id}>
-                      <summary>{c.source_id}</summary>
+                      <summary style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span>{c.source_id} - {c.title}</span>
+                        {(c.patient_id || (c.kind === "variable" && selected)) && (
+                          <button
+                            type="button"
+                            className="cite-action-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCiteClick(c);
+                            }}
+                          >
+                            📊 Ver en Canvas
+                          </button>
+                        )}
+                      </summary>
                       <pre>{c.snippet}</pre>
                     </details>
                   ))}

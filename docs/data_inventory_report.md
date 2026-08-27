@@ -6,7 +6,6 @@ Este reporte resume la estructura de archivos, dimensiones, memoria y estadísti
 
 | Archivo | Número de Registros | Número de Columnas | Memoria | Filas Duplicadas |
 |---|---|---|---|---|
-
 | `01_master\devices.csv` | 2,000 | 11 | 1.12 MB | 0 |
 | `01_master\encounters.csv` | 1,000 | 10 | 601.94 KB | 0 |
 | `01_master\healthcare_facilities.csv` | 7 | 8 | 3.29 KB | 0 |

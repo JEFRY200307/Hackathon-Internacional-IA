@@ -29,6 +29,10 @@ export type AlertItem = {
     window: string;
     detail: string;
     values: Record<string, unknown>;
+    evidence_role?: string;
+    record_id?: string;
+    source_file?: string;
+    contribution?: number;
   }>;
   missing_sources: string[];
   review_status: string;

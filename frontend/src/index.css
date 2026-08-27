@@ -123,8 +123,60 @@ button, input { font: inherit; }
 .bubble p { margin: 0 0 0.4em; white-space: pre-wrap; }
 .bubble.user { align-self: flex-end; background: #eaf1fb; border-color: #cfe0f5; }
 .bubble.assistant { align-self: flex-start; }
-.cites details, .trace { margin-top: 8px; color: var(--ink-secondary); font-size: 0.8rem; }
-.cites pre { white-space: pre-wrap; background: var(--surface); border: 1px solid var(--line); padding: 8px; border-radius: 8px; }
+.cites {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.cites details {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+.cites details:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 4px rgba(11, 11, 11, 0.04);
+}
+.cites summary {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+}
+.cites summary:focus {
+  outline: none;
+}
+.cites pre {
+  margin: 0;
+  white-space: pre-wrap;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  color: var(--ink-secondary);
+  border-radius: 0;
+}
+.cite-action-btn {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: opacity 0.2s;
+}
+.cite-action-btn:hover {
+  opacity: 0.9;
+}
+.trace { margin-top: 8px; color: var(--ink-secondary); font-size: 0.8rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 8px; }
 .chips button { font-size: 0.78rem; }
 .composer { display: flex; gap: 8px; padding: 0 16px 16px; }
