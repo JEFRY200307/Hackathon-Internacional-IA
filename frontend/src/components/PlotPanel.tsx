@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import Plotly from "plotly.js-dist-min";
 import type { PlotlySpec } from "../types";
-import { colorFor } from "../palette";
+import { colorFor, LEVEL_COLORS } from "../palette";
 
 const CHART_LAYOUT_DEFAULTS = {
   paper_bgcolor: "#fcfcfb",
@@ -21,7 +21,11 @@ export function PlotPanel({ spec }: { spec: PlotlySpec }) {
       const name = typeof trace.name === "string" ? trace.name : "";
       const color = colorFor(name);
       if (trace.type === "bar") {
-        return { ...trace, marker: { color, ...(trace.marker as object) } };
+        const categories = Array.isArray(trace.x) ? trace.x : [];
+        const semanticColors = categories.map((category) => LEVEL_COLORS[String(category).toUpperCase()]);
+        const markerColor =
+          semanticColors.length > 0 && semanticColors.every(Boolean) ? semanticColors : color;
+        return { ...trace, marker: { color: markerColor, ...(trace.marker as object) } };
       }
       return { ...trace, line: { color, width: 2, ...(trace.line as object) }, marker: { color, size: 6, ...(trace.marker as object) } };
     });

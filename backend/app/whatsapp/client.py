@@ -53,7 +53,95 @@ class WhatsAppClient:
             }
         )
 
+    async def send_buttons(
+        self,
+        to: str,
+        body: str,
+        buttons: list[dict[str, str]],
+        footer: str = "RISA Signal · Apoyo clínico",
+    ) -> str:
+        if not 1 <= len(buttons) <= 3:
+            raise ValueError("WhatsApp admite entre 1 y 3 botones de respuesta")
+        if any(len(button["title"]) > 20 for button in buttons):
+            raise ValueError("el título de un botón supera 20 caracteres")
+        return await self._send(
+            {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "interactive",
+                "interactive": {
+                    "type": "button",
+                    "body": {"text": body[:1024]},
+                    "footer": {"text": footer[:60]},
+                    "action": {
+                        "buttons": [
+                            {
+                                "type": "reply",
+                                "reply": {"id": button["id"][:256], "title": button["title"]},
+                            }
+                            for button in buttons
+                        ]
+                    },
+                },
+            }
+        )
+
+    async def send_list(
+        self,
+        to: str,
+        body: str,
+        rows: list[dict[str, str]],
+        button_text: str = "Ver opciones",
+    ) -> str:
+        if not 1 <= len(rows) <= 10:
+            raise ValueError("la lista debe contener entre 1 y 10 opciones")
+        return await self._send(
+            {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "interactive",
+                "interactive": {
+                    "type": "list",
+                    "body": {"text": body[:4096]},
+                    "action": {
+                        "button": button_text[:20],
+                        "sections": [
+                            {
+                                "title": "Opciones RISA",
+                                "rows": [
+                                    {
+                                        "id": row["id"][:200],
+                                        "title": row["title"][:24],
+                                        "description": row.get("description", "")[:72],
+                                    }
+                                    for row in rows
+                                ],
+                            }
+                        ],
+                    },
+                },
+            }
+        )
+
     async def send_template(self, to: str, count: int, priority: str) -> str:
+        components: list[dict[str, Any]] = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": str(count)},
+                    {"type": "text", "text": priority},
+                ],
+            }
+        ]
+        if self.settings.whatsapp_template_quick_reply:
+            components.append(
+                {
+                    "type": "button",
+                    "sub_type": "quick_reply",
+                    "index": "0",
+                    "parameters": [{"type": "payload", "payload": "MENU_ALERTS"}],
+                }
+            )
         return await self._send(
             {
                 "messaging_product": "whatsapp",
@@ -62,27 +150,22 @@ class WhatsAppClient:
                 "template": {
                     "name": self.settings.whatsapp_template_name,
                     "language": {"code": self.settings.whatsapp_template_language},
-                    "components": [
-                        {
-                            "type": "body",
-                            "parameters": [
-                                {"type": "text", "text": str(count)},
-                                {"type": "text", "text": priority},
-                            ],
-                        }
-                    ],
+                    "components": components,
                 },
             }
         )
 
     async def upload_image(self, content: bytes, filename: str = "risa-chart.png") -> str:
+        return await self.upload_media(content, filename, "image/png")
+
+    async def upload_media(self, content: bytes, filename: str, mime_type: str) -> str:
         if self.dry_run:
             return f"dry-media-{uuid.uuid4().hex}"
         response = await self.http.post(
             f"{self.base_url}/media",
             headers=self.headers,
-            data={"messaging_product": "whatsapp", "type": "image/png"},
-            files={"file": (filename, content, "image/png")},
+            data={"messaging_product": "whatsapp", "type": mime_type},
+            files={"file": (filename, content, mime_type)},
         )
         response.raise_for_status()
         return str(response.json()["id"])
@@ -96,6 +179,48 @@ class WhatsAppClient:
                 "to": to,
                 "type": "image",
                 "image": {"id": media_id, "caption": caption[:1024]},
+            }
+        )
+
+    async def send_document(
+        self,
+        to: str,
+        content: bytes,
+        filename: str,
+        caption: str,
+    ) -> str:
+        media_id = await self.upload_media(content, filename, "application/pdf")
+        return await self._send(
+            {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "document",
+                "document": {
+                    "id": media_id,
+                    "filename": filename,
+                    "caption": caption[:1024],
+                },
+            }
+        )
+
+    async def send_contact(self, to: str, clinical_phone: str) -> str:
+        return await self._send(
+            {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "contacts",
+                "contacts": [
+                    {
+                        "name": {"formatted_name": "Contacto clínico RISA"},
+                        "phones": [
+                            {
+                                "phone": f"+{clinical_phone}",
+                                "type": "WORK",
+                                "wa_id": clinical_phone,
+                            }
+                        ],
+                    }
+                ],
             }
         )
 

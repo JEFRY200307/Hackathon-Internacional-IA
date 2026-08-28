@@ -9,3 +9,4 @@ Estándares y buenas prácticas transversales del proyecto — no describen *qu�
 | [03-guia-frontend.md](03-guia-frontend.md) | Sistema de diseño: paleta, tipografía, componentes, accesibilidad |
 | [04-seguridad-y-datos.md](04-seguridad-y-datos.md) | Protección de datos, secretos, superficie de ataque y sus límites en un prototipo de 12 h |
 | [05-risa-ui-dashboard.md](05-risa-ui-dashboard.md) | Uso, prompts, widgets, límites, pruebas y extensión de dashboards RISA UI |
+| [06-whatsapp-risa.md](06-whatsapp-risa.md) | Número único, webhook oficial, chat, gráficos, permisos y notificaciones anti-spam |

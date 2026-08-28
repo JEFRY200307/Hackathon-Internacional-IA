@@ -3,6 +3,8 @@ from __future__ import annotations
 from io import BytesIO
 from typing import Any
 
+from app.whatsapp.labels import clinical_label
+
 LEVEL_COLORS = {
     "CRITICO": "#d03b3b",
     "ALTO": "#ec835a",
@@ -37,15 +39,15 @@ def render_chart_png(spec: dict[str, Any]) -> bytes:
         color = SERIES_COLORS[index % len(SERIES_COLORS)]
         if trace_type == "bar":
             colors = [LEVEL_COLORS.get(str(value).upper(), color) for value in x]
-            axis.bar([str(value) for value in x], y, label=label, color=colors)
+            axis.bar([clinical_label(value) for value in x], y, label=clinical_label(label), color=colors)
         elif trace_type == "histogram":
             axis.hist(x, bins=min(12, max(3, len(x) // 3)), label=label, color=color)
         else:
             mode = str(trace.get("mode") or "lines")
             if "lines" in mode:
-                axis.plot(x, y, label=label, color=color, marker="o" if "markers" in mode else None)
+                axis.plot(x, y, label=clinical_label(label), color=color, marker="o" if "markers" in mode else None)
             else:
-                axis.scatter(x, y, label=label, color=color)
+                axis.scatter(x, y, label=clinical_label(label), color=color)
     layout = spec.get("layout") or {}
     title = layout.get("title") or "RISA Signal"
     if isinstance(title, dict):

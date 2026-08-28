@@ -53,7 +53,10 @@ def whatsapp_status(
         "enabled": runtime.settings.whatsapp_enabled,
         "dry_run": runtime.client.dry_run,
         "live_ready": runtime.settings.whatsapp_live_ready,
+        "twilio_live_ready": runtime.settings.twilio_live_ready,
+        "twilio_dry_run": runtime.verifier.dry_run,
         "contacts": len(runtime.store.list_contacts()),
+        "clinical_store": runtime.clinical.stats(),
         "worker_running": bool(runtime.task and not runtime.task.done()),
     }
 

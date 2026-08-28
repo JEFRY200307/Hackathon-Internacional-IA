@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     whatsapp_graph_version: str = "v25.0"
     whatsapp_template_name: str = "risa_alert_update"
     whatsapp_template_language: str = "es"
+    whatsapp_template_quick_reply: bool = False
     whatsapp_db_path: str = ".runtime/whatsapp.sqlite3"
     whatsapp_scan_seconds: int = 300
     whatsapp_cooldown_hours: int = 12
@@ -33,6 +34,15 @@ class Settings(BaseSettings):
     whatsapp_quiet_end_hour: int = 8
     whatsapp_medium_risk_threshold: float = 0.7
     whatsapp_admin_token: str = ""
+    patient_contacts_csv: str = ".runtime/private/patient_contacts.csv"
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_verify_service_sid: str = ""
+    twilio_dry_run: bool = True
+    otp_max_starts_hour: int = 3
+    otp_max_checks: int = 5
+    otp_session_minutes: int = 10
+    clinical_contact_phone: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -46,6 +56,14 @@ class Settings(BaseSettings):
             and self.whatsapp_waba_id
             and self.whatsapp_verify_token
             and self.whatsapp_app_secret
+        )
+
+    @property
+    def twilio_live_ready(self) -> bool:
+        return bool(
+            self.twilio_account_sid
+            and self.twilio_auth_token
+            and self.twilio_verify_service_sid
         )
 
 

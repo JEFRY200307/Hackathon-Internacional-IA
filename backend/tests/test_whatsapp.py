@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -18,10 +19,14 @@ from app.config import Settings
 from app.llm.planning import CohortQueryService, deterministic_plan
 from app.whatsapp.charts import render_chart_png
 from app.whatsapp.client import WhatsAppClient
+from app.whatsapp.clinical_store import ClinicalStore
+from app.whatsapp.formatting import clean_whatsapp_text
 from app.whatsapp.policy import NotificationPolicy
+from app.whatsapp.reports import build_patient_report
 from app.whatsapp.runtime import WhatsAppRuntime
 from app.whatsapp.router import router
 from app.whatsapp.store import WhatsAppStore
+from app.whatsapp.twilio_verify import TwilioVerify
 
 
 class FakeClient:
@@ -37,8 +42,35 @@ class FakeClient:
     async def send_template(self, to: str, count: int, priority: str) -> str:
         return f"template-{to}-{count}-{priority}"
 
+    async def send_buttons(self, to: str, body: str, buttons, footer: str = "") -> str:
+        self.texts.append((to, body))
+        return f"buttons-{len(self.texts)}"
+
+    async def send_list(self, to: str, body: str, rows, button_text: str = "") -> str:
+        self.texts.append((to, body))
+        return f"list-{len(self.texts)}"
+
     async def send_image(self, to: str, content: bytes, caption: str) -> str:
         return f"image-{to}-{len(content)}"
+
+    async def send_document(self, to: str, content: bytes, filename: str, caption: str) -> str:
+        return f"document-{to}-{len(content)}"
+
+    async def send_contact(self, to: str, clinical_phone: str) -> str:
+        return f"contact-{to}-{clinical_phone}"
+
+    async def close(self) -> None:
+        return None
+
+
+class FakeVerifier:
+    dry_run = False
+
+    async def start(self, phone: str):
+        return {"sid": "VE-test", "status": "pending"}
+
+    async def check(self, phone: str, code: str) -> bool:
+        return code == "123456"
 
     async def close(self) -> None:
         return None
@@ -54,6 +86,24 @@ class FakeApp:
                     [{"patient_id": "PAT-0724"}, {"patient_id": "PAT-0290"}]
                 ),
                 "origin": "test",
+                "vitals_for": lambda _, patient_id: pd.DataFrame(
+                    [
+                        {
+                            "timestamp": pd.Timestamp("2026-08-01"),
+                            "heart_rate": 75,
+                            "spo2": 97,
+                        }
+                    ]
+                ),
+                "labs_for": lambda _, patient_id: pd.DataFrame(
+                    [
+                        {
+                            "timestamp": pd.Timestamp("2026-08-01"),
+                            "analyte": "LAB_C",
+                            "value": 4.2,
+                        }
+                    ]
+                ),
             },
         )()
         self.alerts = [
@@ -69,6 +119,12 @@ class FakeApp:
                 "model_provenance": {"fingerprint": "model-1"},
             }
         ]
+
+    def alerts_for_patient(self, patient_id: str):
+        return [alert for alert in self.alerts if alert["patient_id"] == patient_id]
+
+    def alert_by_id(self, alert_id: str):
+        return next((alert for alert in self.alerts if alert["id"] == alert_id), None)
 
 
 class WhatsAppTests(unittest.TestCase):
@@ -107,11 +163,25 @@ class WhatsAppTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.upsert_contact("+593999999999", "patient", [], True)
 
-    def test_patient_registers_from_whatsapp_with_single_use_code(self) -> None:
+    def test_patient_registers_with_trusted_phone_sms_and_consent(self) -> None:
         phone = "51946153327"
-        code = self.store.create_enrollment_code("PAT-0724")
+        contacts_path = Path(self.temp.name) / "contacts.csv"
+        contacts_path.write_text(
+            "patient_id,phone_e164,timezone,clinical_contact_phone\n"
+            "PAT-0724,+51946153327,America/Lima,\n",
+            encoding="utf-8",
+        )
+        clinical = ClinicalStore(self.db)
+        clinical.import_contacts(contacts_path, {"PAT-0724", "PAT-0290"})
         client = FakeClient()
-        runtime = WhatsAppRuntime(self.settings, FakeApp(), self.store, client)
+        runtime = WhatsAppRuntime(
+            self.settings,
+            FakeApp(),
+            self.store,
+            client,
+            clinical_store=clinical,
+            verifier=FakeVerifier(),
+        )
 
         async def scenario() -> None:
             await runtime.process_message(
@@ -119,7 +189,7 @@ class WhatsAppTests(unittest.TestCase):
                     "id": "enroll-1",
                     "from": phone,
                     "type": "text",
-                    "text": {"body": f"REGISTRAR {code}"},
+                    "text": {"body": "PAT-0724"},
                 }
             )
             self.assertIsNone(self.store.get_contact(phone))
@@ -128,7 +198,19 @@ class WhatsAppTests(unittest.TestCase):
                     "id": "enroll-2",
                     "from": phone,
                     "type": "text",
-                    "text": {"body": "ACEPTO"},
+                    "text": {"body": "123456"},
+                }
+            )
+            self.assertIsNone(self.store.get_contact(phone))
+            await runtime.process_message(
+                {
+                    "id": "enroll-3",
+                    "from": phone,
+                    "type": "interactive",
+                    "interactive": {
+                        "type": "button_reply",
+                        "button_reply": {"id": "CONSENT_ACCEPT", "title": "Acepto"},
+                    },
                 }
             )
 
@@ -137,8 +219,6 @@ class WhatsAppTests(unittest.TestCase):
         self.assertEqual(contact["patient_ids"], ["PAT-0724"])
         self.assertTrue(contact["opted_in"])
         self.assertTrue(self.store.session_active(phone))
-        with self.assertRaises(ValueError):
-            self.store.begin_enrollment("51999999999", code)
 
     def test_authorized_scope_intersects_query(self) -> None:
         app = FakeApp()
@@ -240,6 +320,105 @@ class WhatsAppTests(unittest.TestCase):
         self.assertTrue(content.startswith(b"\x89PNG"))
         self.assertLess(len(content), 5 * 1024 * 1024)
 
+    def test_clinical_csv_sync_is_idempotent_and_imports_contact(self) -> None:
+        raw = Path(self.temp.name) / "raw"
+        master = raw / "01_master"
+        master.mkdir(parents=True)
+        (master / "patients.csv").write_text(
+            "patient_id,age_years\nPAT-0724,64\n",
+            encoding="utf-8",
+        )
+        contacts = Path(self.temp.name) / "contacts.csv"
+        contacts.write_text(
+            "patient_id,phone_e164,timezone,clinical_contact_phone\n"
+            "PAT-0724,+51946153327,America/Lima,\n",
+            encoding="utf-8",
+        )
+        clinical = ClinicalStore(self.db)
+        first = clinical.sync_raw_csvs(raw)
+        second = clinical.sync_raw_csvs(raw)
+        self.assertEqual(first["01_master/patients.csv"], 1)
+        self.assertEqual(second, {})
+        self.assertEqual(clinical.import_contacts(contacts, {"PAT-0724"}), 1)
+        self.assertEqual(clinical.trusted_contact("PAT-0724")["phone"], "51946153327")
+        self.assertEqual(clinical.patient_profile("PAT-0724")["age_years"], 64)
+
+    def test_whatsapp_formatting_removes_headings_and_translates_codes(self) -> None:
+        text = clean_whatsapp_text(
+            "### Resultado\n**Patrón:** PROGRESSIVE_MULTISOURCE\n- LAB_C"
+        )
+        self.assertNotIn("###", text)
+        self.assertNotIn("**", text)
+        self.assertIn("Tendencia progresiva en múltiples fuentes", text)
+        self.assertIn("Marcador de laboratorio C", text)
+
+    def test_pdf_report_is_generated_for_authorized_patient(self) -> None:
+        content = build_patient_report(FakeApp(), "PAT-0724")
+        self.assertTrue(content.startswith(b"%PDF"))
+
+    def test_interactive_button_limits_are_enforced(self) -> None:
+        client = WhatsAppClient(self.settings)
+        with self.assertRaises(ValueError):
+            asyncio.run(
+                client.send_buttons(
+                    "51946153327",
+                    "Opciones",
+                    [{"id": str(index), "title": "Opción"} for index in range(4)],
+                )
+            )
+        asyncio.run(client.close())
+
+    def test_notification_template_can_include_alert_quick_reply(self) -> None:
+        captured = {}
+
+        def handler(request):
+            captured.update(json.loads(request.content))
+            return httpx.Response(200, json={"messages": [{"id": "wamid-test"}]})
+
+        config = Settings(
+            _env_file=None,
+            whatsapp_dry_run=False,
+            whatsapp_app_secret="secret",
+            whatsapp_access_token="token",
+            whatsapp_phone_number_id="123",
+            whatsapp_waba_id="456",
+            whatsapp_verify_token="verify",
+            whatsapp_template_quick_reply=True,
+        )
+        client = WhatsAppClient(config, transport=httpx.MockTransport(handler))
+
+        async def scenario() -> None:
+            await client.send_template("51946153327", 1, "Alta")
+            await client.close()
+
+        asyncio.run(scenario())
+        button = captured["template"]["components"][-1]
+        self.assertEqual(button["sub_type"], "quick_reply")
+        self.assertEqual(button["parameters"][0]["payload"], "MENU_ALERTS")
+
+    def test_twilio_verify_start_and_check(self) -> None:
+        def handler(request):
+            if request.url.path.endswith("/Verifications"):
+                return httpx.Response(201, json={"sid": "VE123", "status": "pending"})
+            return httpx.Response(200, json={"status": "approved"})
+
+        config = Settings(
+            _env_file=None,
+            twilio_account_sid="AC123",
+            twilio_auth_token="secret",
+            twilio_verify_service_sid="VA123",
+            twilio_dry_run=False,
+        )
+        verifier = TwilioVerify(config, transport=httpx.MockTransport(handler))
+
+        async def scenario() -> None:
+            started = await verifier.start("51946153327")
+            self.assertEqual(started["status"], "pending")
+            self.assertTrue(await verifier.check("51946153327", "123456"))
+            await verifier.close()
+
+        asyncio.run(scenario())
+
     def test_commands_require_session_and_preserve_authorization(self) -> None:
         phone = "593999999999"
         self.store.upsert_contact(phone, "patient", ["PAT-0724"], True)
@@ -262,8 +441,39 @@ class WhatsAppTests(unittest.TestCase):
                 self.assertEqual(mocked.await_args.kwargs["authorized_patient_ids"], {"PAT-0724"})
 
         asyncio.run(scenario())
-        self.assertIn("Escribe RISA", client.texts[0][1])
-        self.assertIn("Sesión RISA iniciada", client.texts[1][1])
+        self.assertIn("sesión está cerrada", client.texts[0][1])
+        self.assertIn("RISA está listo", client.texts[1][1])
+
+    def test_alert_confirmation_is_idempotent_and_scoped(self) -> None:
+        phone = "51946153327"
+        self.store.upsert_contact(phone, "patient", ["PAT-0724"], True)
+        self.store.open_session(phone)
+        client = FakeClient()
+        runtime = WhatsAppRuntime(
+            self.settings,
+            FakeApp(),
+            self.store,
+            client,
+            verifier=FakeVerifier(),
+        )
+
+        async def scenario() -> None:
+            message = {
+                "from": phone,
+                "type": "interactive",
+                "interactive": {
+                    "button_reply": {
+                        "id": "ALERT_CONFIRM:A-724",
+                        "title": "Confirmar lectura",
+                    }
+                },
+            }
+            await runtime.process_message({**message, "id": "confirm-1"})
+            await runtime.process_message({**message, "id": "confirm-2"})
+
+        asyncio.run(scenario())
+        self.assertIn("registrada", client.texts[0][1])
+        self.assertIn("ya estaba confirmada", client.texts[1][1])
 
     def test_webhook_event_is_idempotent(self) -> None:
         self.assertTrue(self.store.event_once("wamid-1"))

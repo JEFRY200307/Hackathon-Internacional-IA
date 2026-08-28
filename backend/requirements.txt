@@ -13,3 +13,4 @@ pyarrow>=17.0.0
 xgboost>=2.1.0
 lightgbm>=4.5.0
 matplotlib>=3.9.0
+reportlab>=4.2.0

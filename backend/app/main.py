@@ -77,6 +77,8 @@ def health() -> dict[str, Any]:
             "enabled": settings.whatsapp_enabled,
             "dry_run": settings.whatsapp_dry_run,
             "live_ready": settings.whatsapp_live_ready,
+            "twilio_live_ready": settings.twilio_live_ready,
+            "twilio_dry_run": settings.twilio_dry_run,
         },
     }
 

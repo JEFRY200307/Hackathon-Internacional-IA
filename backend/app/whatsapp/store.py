@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import hashlib
-import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -55,19 +53,15 @@ class WhatsAppStore:
                     active_until TEXT,
                     updated_at TEXT NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS enrollment_codes (
-                    code_hash TEXT PRIMARY KEY,
-                    patient_id TEXT NOT NULL,
-                    expires_at TEXT NOT NULL,
-                    claimed_phone TEXT,
-                    claimed_at TEXT,
-                    used_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS pending_enrollments (
+                CREATE TABLE IF NOT EXISTS otp_sessions (
                     phone TEXT PRIMARY KEY,
                     patient_id TEXT NOT NULL,
-                    code_hash TEXT NOT NULL REFERENCES enrollment_codes(code_hash),
-                    expires_at TEXT NOT NULL
+                    status TEXT NOT NULL,
+                    starts INTEGER NOT NULL DEFAULT 1,
+                    checks INTEGER NOT NULL DEFAULT 0,
+                    window_started_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,83 +109,126 @@ class WhatsAppStore:
                     owner TEXT NOT NULL,
                     expires_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS alert_actions (
+                    phone TEXT NOT NULL,
+                    alert_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(phone, alert_id, action)
+                );
                 """
             )
 
-    def create_enrollment_code(self, patient_id: str, hours: int = 24) -> str:
-        code = secrets.token_hex(4).upper()
-        code_hash = hashlib.sha256(code.encode()).hexdigest()
+    def start_otp_session(
+        self,
+        phone: str,
+        patient_id: str,
+        max_starts_hour: int,
+        session_minutes: int,
+    ) -> None:
+        phone = normalize_phone(phone)
+        now = utc_now()
         with self.connect() as connection:
+            current = connection.execute(
+                "SELECT * FROM otp_sessions WHERE phone=?",
+                (phone,),
+            ).fetchone()
+            starts = 1
+            window_started = now
+            if current and datetime.fromisoformat(current["window_started_at"]) > now - timedelta(hours=1):
+                starts = int(current["starts"]) + 1
+                window_started = datetime.fromisoformat(current["window_started_at"])
+            if starts > max_starts_hour:
+                raise ValueError("límite de solicitudes SMS alcanzado")
             connection.execute(
                 """
-                INSERT INTO enrollment_codes(code_hash,patient_id,expires_at)
-                VALUES(?,?,?)
+                INSERT INTO otp_sessions(
+                    phone,patient_id,status,starts,checks,window_started_at,expires_at,updated_at
+                ) VALUES(?,?, 'pending', ?,0,?,?,?)
+                ON CONFLICT(phone) DO UPDATE SET
+                    patient_id=excluded.patient_id,status='pending',starts=excluded.starts,
+                    checks=0,window_started_at=excluded.window_started_at,
+                    expires_at=excluded.expires_at,updated_at=excluded.updated_at
                 """,
                 (
-                    code_hash,
+                    phone,
                     patient_id.upper(),
-                    (utc_now() + timedelta(hours=hours)).isoformat(),
+                    starts,
+                    window_started.isoformat(),
+                    (now + timedelta(minutes=session_minutes)).isoformat(),
+                    now.isoformat(),
                 ),
             )
-        return code
 
-    def begin_enrollment(self, phone: str, code: str) -> str:
+    def otp_session(self, phone: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM otp_sessions WHERE phone=?",
+                (normalize_phone(phone),),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def register_otp_check(self, phone: str, max_checks: int) -> dict[str, Any]:
         phone = normalize_phone(phone)
-        code_hash = hashlib.sha256(code.strip().upper().encode()).hexdigest()
         now = utc_now()
         with self.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM enrollment_codes WHERE code_hash=?",
-                (code_hash,),
+                "SELECT * FROM otp_sessions WHERE phone=?",
+                (phone,),
             ).fetchone()
             if (
                 not row
-                or row["used_at"]
+                or row["status"] != "pending"
                 or datetime.fromisoformat(row["expires_at"]) <= now
-                or (row["claimed_phone"] and row["claimed_phone"] != phone)
+                or int(row["checks"]) >= max_checks
             ):
-                raise ValueError("código inválido, vencido o ya utilizado")
+                raise ValueError("verificación no disponible")
             connection.execute(
-                """
-                UPDATE enrollment_codes SET claimed_phone=?,claimed_at=?
-                WHERE code_hash=?
-                """,
-                (phone, now.isoformat(), code_hash),
+                "UPDATE otp_sessions SET checks=checks+1,updated_at=? WHERE phone=?",
+                (now.isoformat(), phone),
             )
-            connection.execute(
-                """
-                INSERT INTO pending_enrollments(phone,patient_id,code_hash,expires_at)
-                VALUES(?,?,?,?)
-                ON CONFLICT(phone) DO UPDATE SET
-                    patient_id=excluded.patient_id,code_hash=excluded.code_hash,
-                    expires_at=excluded.expires_at
-                """,
-                (phone, row["patient_id"], code_hash, row["expires_at"]),
-            )
-        return str(row["patient_id"])
+        return dict(row)
 
-    def complete_enrollment(self, phone: str, timezone_name: str = "UTC") -> dict[str, Any]:
-        phone = normalize_phone(phone)
-        now = utc_now()
+    def mark_otp_verified(self, phone: str) -> None:
         with self.connect() as connection:
-            pending = connection.execute(
-                "SELECT * FROM pending_enrollments WHERE phone=?",
-                (phone,),
-            ).fetchone()
-            if not pending or datetime.fromisoformat(pending["expires_at"]) <= now:
-                raise ValueError("no existe un registro pendiente válido")
-            updated = connection.execute(
-                """
-                UPDATE enrollment_codes SET used_at=?
-                WHERE code_hash=? AND claimed_phone=? AND used_at IS NULL
-                """,
-                (now.isoformat(), pending["code_hash"], phone),
+            connection.execute(
+                "UPDATE otp_sessions SET status='verified',updated_at=? WHERE phone=?",
+                (utc_now().isoformat(), normalize_phone(phone)),
             )
-            if updated.rowcount != 1:
-                raise ValueError("el código ya fue utilizado")
-            patient_id = str(pending["patient_id"])
-            connection.execute("DELETE FROM pending_enrollments WHERE phone=?", (phone,))
-        return self.upsert_contact(phone, "patient", [patient_id], True, timezone_name)
+
+    def complete_otp_enrollment(self, phone: str, timezone_name: str) -> dict[str, Any]:
+        phone = normalize_phone(phone)
+        session = self.otp_session(phone)
+        if not session or session["status"] != "verified":
+            raise ValueError("el SMS todavía no fue verificado")
+        contact = self.upsert_contact(
+            phone,
+            "patient",
+            [str(session["patient_id"])],
+            True,
+            timezone_name,
+        )
+        with self.connect() as connection:
+            connection.execute("DELETE FROM otp_sessions WHERE phone=?", (phone,))
+        return contact
+
+    def cancel_otp(self, phone: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM otp_sessions WHERE phone=?",
+                (normalize_phone(phone),),
+            )
+
+    def record_alert_action(self, phone: str, alert_id: str, action: str) -> bool:
+        try:
+            with self.connect() as connection:
+                connection.execute(
+                    "INSERT INTO alert_actions(phone,alert_id,action,created_at) VALUES(?,?,?,?)",
+                    (normalize_phone(phone), alert_id, action, utc_now().isoformat()),
+                )
+            return True
+        except sqlite3.IntegrityError:
+            return False
 
     def upsert_contact(
         self,
@@ -247,6 +284,18 @@ class WhatsAppStore:
             connection.execute(
                 "UPDATE contacts SET opted_in=?, updated_at=? WHERE phone=?",
                 (int(enabled), utc_now().isoformat(), normalize_phone(phone)),
+            )
+
+    def deactivate_contact(self, phone: str) -> None:
+        phone = normalize_phone(phone)
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE contacts SET active=0,opted_in=0,updated_at=? WHERE phone=?",
+                (utc_now().isoformat(), phone),
+            )
+            connection.execute(
+                "UPDATE sessions SET active_until=NULL,updated_at=? WHERE phone=?",
+                (utc_now().isoformat(), phone),
             )
 
     def open_session(self, phone: str, hours: int = 24) -> None:
