@@ -1,5 +1,17 @@
 export type ChatRole = "user" | "assistant";
 
+export type PatientDemographic = {
+  patient_id: string;
+  sex_at_birth: string;
+  age_years: number;
+  age_group: string;
+  region_type: string;
+  care_program: string;
+  baseline_risk_profile: string;
+  enrollment_date: string;
+  active: boolean;
+};
+
 export type Citation = {
   source_id: string;
   kind: string;
@@ -40,6 +52,7 @@ export type AlertItem = {
   pattern_score?: number;
   risk_score?: number;
   priority_level?: string;
+  features?: Record<string, any>;
   model_provenance?: {
     source?: string;
     fingerprint?: string;

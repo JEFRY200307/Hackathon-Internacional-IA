@@ -19,6 +19,10 @@ export const api = {
     parse<{ items: AlertItem[]; counts: Record<string, number>; origin: string }>(
       fetch(`${API}/api/alerts${level ? `?level=${level}` : ""}`),
     ),
+  patients: () =>
+    parse<{ origin: string; items: any[] }>(
+      fetch(`${API}/api/patients`),
+    ),
   review: (id: string, status: string) =>
     parse<AlertItem>(
       fetch(`${API}/api/alerts/${id}/review`, {

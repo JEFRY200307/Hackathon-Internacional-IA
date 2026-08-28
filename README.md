@@ -135,7 +135,7 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --reload-dir app --port 8000
 ```
 
 Sin `OPENAI_API_KEY` el chat usa **MockLLM** + las mismas tools (dataset, alertas, RISA UI, gráficos, RAG) sobre los datos reales. Con key, el modelo es **`gpt-4o`**. `PRETRAINED_MODEL_URL` conecta un modelo preentrenado externo por HTTP; si no está, hay fallback local (`local-fallback-0.1`).
