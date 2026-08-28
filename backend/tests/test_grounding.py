@@ -10,6 +10,7 @@ from app.llm.planning import (
     DashboardQueryPlan,
     ResolvedCohort,
     ResolvedScope,
+    _inherit_follow_up,
     deterministic_plan,
 )
 
@@ -86,6 +87,19 @@ class GroundingTests(unittest.TestCase):
         scope = self.service.resolve(plan)
         self.assertEqual(scope.patient_ids, ["PAT-0724"])
         self.assertEqual(plan.variables, ["spo2"])
+
+    def test_follow_up_inherits_patient_and_chart_constraints(self) -> None:
+        messages = [
+            "Realiza un gráfico de barras comparando los niveles de alerta para PAT-0724",
+            "Dame únicamente el último mes registrado",
+        ]
+        current = deterministic_plan(messages[-1], self.service.catalog())
+        plan = _inherit_follow_up(current, messages, self.service.catalog())
+        scope = self.service.resolve(plan)
+        self.assertEqual(scope.patient_ids, ["PAT-0724"])
+        self.assertEqual(plan.chart_analysis, "alert_breakdown")
+        self.assertEqual(plan.preferred_chart_kind, "bar")
+        self.assertEqual(plan.time_window_hours, 720)
 
     def test_ranges_and_categories_resolve_deterministically(self) -> None:
         plan = deterministic_plan(

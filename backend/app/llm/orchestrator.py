@@ -40,10 +40,14 @@ def _collect(result: Any, bag: dict[str, Any]) -> None:
         bag["citations"].append(result)
 
 
-async def handle_chat(messages: list[dict[str, str]], app: AppState) -> dict[str, Any]:
+async def handle_chat(
+    messages: list[dict[str, str]],
+    app: AppState,
+    authorized_patient_ids: set[str] | None = None,
+) -> dict[str, Any]:
     last = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
-    plan, query_service = await create_query_plan(last, app)
-    scope = query_service.resolve(plan)
+    plan, query_service = await create_query_plan(messages, app)
+    scope = query_service.resolve(plan, authorized_patient_ids=authorized_patient_ids)
     bag: dict[str, Any] = {
         "risa_ui": None,
         "charts": [],
@@ -55,6 +59,10 @@ async def handle_chat(messages: list[dict[str, str]], app: AppState) -> dict[str
         "resolved_scope": scope.model_dump(),
         "warnings": list(scope.warnings),
     }
+    if plan.chart_analysis == "alert_breakdown" and plan.time_window_hours:
+        bag["warnings"].append(
+            "Las alertas son un snapshot sin fecha clínica histórica; el período no puede aplicarse al conteo por nivel."
+        )
 
     if settings.openai_api_key:
         try:

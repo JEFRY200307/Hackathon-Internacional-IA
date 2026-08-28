@@ -52,6 +52,14 @@ class DashboardQueryPlan(StrictModel):
     metrics: list[str] = Field(default_factory=list, max_length=8)
     group_by: Literal["level", "priority_level", "age_group", "sex_at_birth", "region_type", "care_program", "pattern"] | None = None
     time_window_hours: int | None = Field(default=None, ge=1, le=24 * 365)
+    chart_analysis: Literal[
+        "patient_series",
+        "cohort_timeseries",
+        "distribution",
+        "cohort_comparison",
+        "alert_breakdown",
+    ] | None = None
+    preferred_chart_kind: Literal["line", "bar", "scatter"] | None = None
 
 
 class ResolvedCohort(StrictModel):
@@ -104,18 +112,30 @@ class CohortQueryService:
             "variables": ["heart_rate", "spo2", "resp_rate", "sbp", "dbp", "temp", "LAB_A", "LAB_B", "LAB_C", "LAB_D"],
         }
 
-    def resolve(self, plan: DashboardQueryPlan) -> ResolvedScope:
+    def resolve(
+        self,
+        plan: DashboardQueryPlan,
+        authorized_patient_ids: set[str] | None = None,
+    ) -> ResolvedScope:
         known_ids = set(self.patients["patient_id"])
+        authorized = (
+            {patient_id.upper() for patient_id in authorized_patient_ids} & known_ids
+            if authorized_patient_ids is not None
+            else known_ids
+        )
         cohorts: list[ResolvedCohort] = []
         warnings: list[str] = []
         for spec in plan.cohorts:
-            frame = self.patients
+            frame = self.patients[self.patients["patient_id"].isin(authorized)]
             explicit = [pid.upper() for pid in spec.patient_ids]
             unknown = [pid for pid in explicit if pid not in known_ids]
             if unknown:
                 warnings.append(f"Pacientes inexistentes omitidos en {spec.name}: {', '.join(unknown[:5])}")
+            denied = [pid for pid in explicit if pid in known_ids and pid not in authorized]
+            if denied:
+                warnings.append(f"Pacientes sin autorización omitidos en {spec.name}: {', '.join(denied[:5])}")
             if explicit:
-                frame = frame[frame["patient_id"].isin([pid for pid in explicit if pid in known_ids])]
+                frame = frame[frame["patient_id"].isin([pid for pid in explicit if pid in authorized])]
             filters = spec.filters
             frame = self._filter_patient_columns(frame, filters)
             ids = [pid for pid in frame["patient_id"].tolist() if self._matches_alert(pid, filters)]
@@ -235,7 +255,26 @@ def deterministic_plan(text: str, catalog: dict[str, Any]) -> DashboardQueryPlan
         )
         if any(alias in f" {low} " for alias in aliases)
     ]
-    wants_dashboard = any(word in low for word in ("dashboard", "tablero", "panel", "risa ui"))
+    wants_dashboard = any(
+        word in low for word in ("dashboard", "tablero", "panel", "risa ui", "gráfico", "grafico", "visualiza")
+    )
+    time_window_hours = _time_window_hours(low)
+    preferred_chart_kind = (
+        "bar"
+        if "barra" in low
+        else "scatter"
+        if any(word in low for word in ("dispersión", "dispersion", "scatter"))
+        else "line"
+        if any(word in low for word in ("línea", "linea", "temporal", "tendencia"))
+        else None
+    )
+    chart_analysis = None
+    if "nivel" in low and preferred_chart_kind == "bar":
+        chart_analysis = "alert_breakdown"
+    elif any(word in low for word in ("distribución", "distribucion", "histograma")):
+        chart_analysis = "distribution"
+    elif variables and patient_ids:
+        chart_analysis = "patient_series"
     if "compar" in low and len(levels) >= 2:
         cohorts = [
             CohortSpec(name=level, filters=CohortFilters(levels=[level]))
@@ -262,12 +301,94 @@ def deterministic_plan(text: str, catalog: dict[str, Any]) -> DashboardQueryPlan
         cohorts=cohorts,
         variables=variables,
         group_by="level" if levels or "nivel" in low else None,
+        time_window_hours=time_window_hours,
+        chart_analysis=chart_analysis,
+        preferred_chart_kind=preferred_chart_kind,
     )
 
 
-async def create_query_plan(text: str, app: AppState) -> tuple[DashboardQueryPlan, CohortQueryService]:
+def _time_window_hours(text: str) -> int | None:
+    if any(value in text for value in ("último mes", "ultimo mes", "últimos 30 días", "ultimos 30 dias")):
+        return 24 * 30
+    if any(value in text for value in ("última semana", "ultima semana", "últimos 7 días", "ultimos 7 dias")):
+        return 24 * 7
+    if any(value in text for value in ("últimas 24 horas", "ultimas 24 horas", "último día", "ultimo dia")):
+        return 24
+    match = re.search(r"(?:últim[oa]s?|ultim[oa]s?)\s+(\d+)\s+(horas?|días?|dias?)", text)
+    if not match:
+        return None
+    amount = int(match.group(1))
+    return min(24 * 365, amount * (24 if match.group(2).startswith("d") else 1))
+
+
+def _is_follow_up(text: str) -> bool:
+    low = text.lower()
+    return any(
+        marker in low
+        for marker in (
+            "únicamente",
+            "unicamente",
+            "ahora",
+            "también",
+            "tambien",
+            "el mismo",
+            "la misma",
+            "ese ",
+            "esa ",
+            "estos ",
+            "esas ",
+            "que otros",
+            "qué otros",
+            "no solo",
+            "solo del",
+            "solo de la",
+        )
+    )
+
+
+def _inherit_follow_up(
+    current: DashboardQueryPlan,
+    user_messages: list[str],
+    catalog: dict[str, Any],
+) -> DashboardQueryPlan:
+    if not user_messages or not _is_follow_up(user_messages[-1]):
+        return current
+    previous = next(
+        (
+            plan
+            for plan in (deterministic_plan(message, catalog) for message in reversed(user_messages[:-1]))
+            if any(cohort.patient_ids for cohort in plan.cohorts)
+            or plan.wants_dashboard
+            or plan.chart_analysis
+        ),
+        None,
+    )
+    if previous is None:
+        return current
+    if not any(cohort.patient_ids for cohort in current.cohorts):
+        explicit_ids = [pid for cohort in previous.cohorts for pid in cohort.patient_ids]
+        if explicit_ids:
+            current.cohorts = [CohortSpec(name="principal", patient_ids=explicit_ids)]
+    if not current.variables:
+        current.variables = previous.variables
+    current.wants_dashboard = current.wants_dashboard or previous.wants_dashboard
+    current.chart_analysis = current.chart_analysis or previous.chart_analysis
+    current.preferred_chart_kind = current.preferred_chart_kind or previous.preferred_chart_kind
+    current.group_by = current.group_by or previous.group_by
+    if current.intent == "cohort" and previous.intent in {"detail", "trend", "distribution"}:
+        current.intent = previous.intent
+    return current
+
+
+async def create_query_plan(
+    messages: list[dict[str, str]],
+    app: AppState,
+) -> tuple[DashboardQueryPlan, CohortQueryService]:
     service = CohortQueryService(app)
+    user_messages = [message["content"] for message in messages if message.get("role") == "user"]
+    text = user_messages[-1] if user_messages else ""
     fallback = deterministic_plan(text, service.catalog())
+    fallback = _inherit_follow_up(fallback, user_messages, service.catalog())
     from app.config import settings
 
     if not settings.openai_api_key:
@@ -291,7 +412,12 @@ async def create_query_plan(text: str, app: AppState) -> tuple[DashboardQueryPla
                 {
                     "role": "user",
                     "content": json.dumps(
-                        {"request": text, "catalog": catalog},
+                        {
+                            "request": text,
+                            "recent_user_turns": user_messages[-6:],
+                            "inherited_constraints": fallback.model_dump(),
+                            "catalog": catalog,
+                        },
                         ensure_ascii=False,
                         default=str,
                     )[:12000],
@@ -316,6 +442,10 @@ async def create_query_plan(text: str, app: AppState) -> tuple[DashboardQueryPla
         plan = DashboardQueryPlan.model_validate_json(calls[0].function.arguments)
         plan.wants_dashboard = plan.wants_dashboard or fallback.wants_dashboard
         plan.variables = list(dict.fromkeys([*fallback.variables, *plan.variables]))[:4]
+        plan.time_window_hours = fallback.time_window_hours or plan.time_window_hours
+        plan.chart_analysis = fallback.chart_analysis or plan.chart_analysis
+        plan.preferred_chart_kind = fallback.preferred_chart_kind or plan.preferred_chart_kind
+        plan.group_by = fallback.group_by or plan.group_by
         explicit_ids = [pid for cohort in fallback.cohorts for pid in cohort.patient_ids]
         if explicit_ids:
             plan.cohorts = [
@@ -360,7 +490,37 @@ def compile_dashboard(
                 "cohort": cohort.name,
             }
         )
-    if plan.intent in {"detail", "trend"} and first_id and len(scope.patient_ids) == 1:
+    if plan.chart_analysis == "alert_breakdown":
+        widgets.append(
+            {
+                "id": "alert-breakdown",
+                "type": "chart",
+                "title": "Alertas por nivel · snapshot actual",
+                "scope_id": scope.scope_id,
+                "cohort": scope.cohorts[0].name,
+                "chart": {
+                    "analysis": "alert_breakdown",
+                    "variables": [],
+                    "group_by": plan.group_by or "level",
+                    "kind": "bar",
+                    "time_window_hours": plan.time_window_hours,
+                },
+            }
+        )
+        if plan.time_window_hours:
+            widgets.append(
+                {
+                    "id": "alert-time-limitation",
+                    "type": "markdown",
+                    "title": "Límite temporal de la fuente",
+                    "text": (
+                        "Las alertas disponibles son un snapshot sin fecha clínica histórica. "
+                        "El período solicitado sí se aplica a series de signos vitales y laboratorios, "
+                        "pero no puede reconstruir alertas históricas por nivel."
+                    ),
+                }
+            )
+    elif plan.intent in {"detail", "trend"} and first_id and len(scope.patient_ids) == 1:
         widgets.append(
             {
                 "id": "patient-series",
@@ -372,7 +532,8 @@ def compile_dashboard(
                     "analysis": "patient_series",
                     "patient_id": first_id,
                     "variables": variables[:4],
-                    "kind": "line",
+                    "kind": plan.preferred_chart_kind or "line",
+                    "time_window_hours": plan.time_window_hours,
                 },
             }
         )
@@ -428,7 +589,8 @@ def compile_dashboard(
                 "chart": {
                     "analysis": "cohort_timeseries",
                     "variables": variables[:4],
-                    "kind": "line",
+                    "kind": plan.preferred_chart_kind or "line",
+                    "time_window_hours": plan.time_window_hours,
                 },
             }
         )

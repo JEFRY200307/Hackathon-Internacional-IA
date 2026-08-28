@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -13,8 +14,21 @@ from app.config import settings
 from app.data.loader import variable_catalog
 from app.llm.orchestrator import handle_chat
 from app.state import state
+from app.whatsapp.router import router as whatsapp_router
+from app.whatsapp.runtime import runtime as whatsapp_runtime
 
-app = FastAPI(title="RISA Signal API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await whatsapp_runtime.start()
+    try:
+        yield
+    finally:
+        await whatsapp_runtime.stop()
+
+
+app = FastAPI(title="RISA Signal API", version="0.1.0", lifespan=lifespan)
+app.include_router(whatsapp_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -59,6 +73,11 @@ def health() -> dict[str, Any]:
         "model": settings.llm_model if settings.openai_api_key else "mock",
         "pretrained": model_status(),
         "pipeline_models": getattr(state.dataset, "model_provenance", {}),
+        "whatsapp": {
+            "enabled": settings.whatsapp_enabled,
+            "dry_run": settings.whatsapp_dry_run,
+            "live_ready": settings.whatsapp_live_ready,
+        },
     }
 
 

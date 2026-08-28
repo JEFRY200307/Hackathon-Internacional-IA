@@ -258,6 +258,10 @@ async def run_tool(
         return await predict_risk(pid, features)
     if name == "emit_risa_ui":
         parsed = EmitRisaUiArgs.model_validate(args)
+        if scope and plan and plan.chart_analysis == "alert_breakdown":
+            from app.llm.planning import compile_dashboard
+
+            return {"risa_ui": hydrate_risa_ui(compile_dashboard(plan, scope, app), app, scope)}
         if parsed.use_turno_template or not parsed.widgets:
             if scope and plan:
                 from app.llm.planning import compile_dashboard
@@ -269,6 +273,10 @@ async def run_tool(
             "subtitle": parsed.subtitle,
             "widgets": [widget.model_dump(exclude_none=True) for widget in parsed.widgets],
         }
+        if plan and plan.time_window_hours:
+            for widget in doc["widgets"]:
+                if widget.get("type") == "chart":
+                    widget["chart"]["time_window_hours"] = plan.time_window_hours
         return {"risa_ui": hydrate_risa_ui(doc, app, scope)}
     if name == "emit_chart":
         if allowed_ids is not None and args.get("patient_id") not in allowed_ids:
@@ -280,6 +288,7 @@ async def run_tool(
                 patient_id=args.get("patient_id"),
                 variables=args.get("variables") or ["heart_rate"],
                 title=args.get("title"),
+                time_window_hours=plan.time_window_hours if plan else None,
             )
         }
     return {"error": f"tool desconocida: {name}"}

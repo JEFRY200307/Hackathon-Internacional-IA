@@ -106,6 +106,7 @@ class ChartBinding(StrictModel):
     group_by: Literal["level", "priority_level", "age_group", "sex_at_birth", "region_type", "care_program", "pattern"] | None = None
     aggregate: Literal["mean", "median", "count"] = "mean"
     kind: Literal["line", "bar", "scatter"] = "line"
+    time_window_hours: int | None = Field(default=None, ge=1, le=24 * 365)
 
     @model_validator(mode="after")
     def validate_analysis(self) -> ChartBinding:

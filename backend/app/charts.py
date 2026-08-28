@@ -83,6 +83,7 @@ def hydrate_risa_ui(
                     patient_id=spec.get("patient_id"),
                     variables=spec.get("variables") or ["heart_rate"],
                     title=widget.get("title") or spec.get("title"),
+                    time_window_hours=spec.get("time_window_hours"),
                 )
             else:
                 plotly = build_scope_chart(app, scope, widget)
@@ -272,6 +273,7 @@ def build_scope_chart(
     if analysis == "cohort_timeseries":
         traces = []
         missing = []
+        time_window_hours = spec.get("time_window_hours")
         for variable in spec.get("variables") or []:
             points = []
             for patient_id in ids:
@@ -282,6 +284,7 @@ def build_scope_chart(
                 missing.append(variable)
                 continue
             combined = pd.concat(points).sort_index()
+            combined = _within_latest_window(combined, time_window_hours)
             daily = combined.groupby(combined.index.floor("D")).mean()
             traces.append(
                 {
@@ -309,6 +312,7 @@ def build_chart(
     patient_id: str | None = None,
     variables: list[str] | None = None,
     title: str | None = None,
+    time_window_hours: int | None = None,
 ) -> dict[str, Any]:
     variables = variables or ["heart_rate"]
     kind = kind if kind in {"line", "bar", "scatter"} else "line"
@@ -327,6 +331,10 @@ def build_chart(
     for var in variables:
         series = _series(dataset, patient_id, var)
         if series is None or series.empty:
+            missing.append(var)
+            continue
+        series = _within_latest_window(series, time_window_hours)
+        if series.empty:
             missing.append(var)
             continue
         trace: dict = {
@@ -371,6 +379,13 @@ def build_chart(
         "missing": missing,
         "origin": dataset.origin,
     }
+
+
+def _within_latest_window(series: pd.Series, hours: int | None) -> pd.Series:
+    if not hours or series.empty:
+        return series
+    cutoff = series.index.max() - pd.Timedelta(hours=int(hours))
+    return series[series.index >= cutoff]
 
 
 def _series(dataset: Dataset, patient_id: str, var: str) -> pd.Series | None:
